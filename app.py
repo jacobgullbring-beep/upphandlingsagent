@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import google.generativeai as genai
+from google import genai
 import os
 from dotenv import load_dotenv
 
@@ -18,10 +18,8 @@ if not api_key:
     st.error("Ingen Gemini API-nyckel hittades. Lägg till GEMINI_API_KEY i dina Secrets på Streamlit Cloud.")
     st.stop()
 
-genai.configure(api_key=api_key)
-
-# Använder gemini-1.5-flash som är standard och fullt kompatibel med gratisnycklar
-model = genai.GenerativeModel("gemini-1.5-flash")
+# Initiera klienten med det nya google-genai paketet
+client = genai.Client(api_key=api_key)
 
 # Filter i sidomenyn
 st.sidebar.header("🔍 Filter")
@@ -83,7 +81,11 @@ if st.button("🚀 Hämta & Analysera Senaste Tilldelningarna", type="primary"):
                - Hur kan GTM-teamet agera på detta? (T.ex. kontakta myndigheten för tilläggstjänster/förändringsledning, eller kontakta den vinnande leverantören som underleverantör/partner inom specialkompetens).
             """
             
-            response = model.generate_content(prompt)
+            # Anropa det nya gränssnittet för generering
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+            )
             
             results.append({
                 "Sektor": item["Sektor"],
