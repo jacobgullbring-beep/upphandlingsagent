@@ -4,9 +4,9 @@ import anthropic
 import os
 import json
 
-st.set_page_config(page_title="GTM Upphandlingsbevakning", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="PA Consulting DAS Upphandlingsbevakning", page_icon="🛡️", layout="wide")
 
-st.title("🛡️ GTM Säljbevakning – Stabil Tabellgenerering")
+st.title("🛡️ PA Consulting DAS Säljbevakning – Stabil Tabellgenerering")
 st.write("Använd snabblänkarna i sidomenyn för att hämta rådata, klistra in och generera tabellen.")
 
 # --- SIDOMENY MED SNABBLÄNKAR ---
