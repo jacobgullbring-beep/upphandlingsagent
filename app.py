@@ -3,11 +3,12 @@ import pandas as pd
 import anthropic
 import os
 import json
+from datetime import datetime, timedelta
 
-st.set_page_config(page_title="PA DAS Upphandlingsbevakning", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="PA DAS Anbudbevakning", page_icon="🛡️", layout="wide")
 
-st.title("🛡️ PA DAS Upphandlingsbevakning")
-st.write("Använd snabblänkarna i sidomenyn för att hämta rådata, klistra in och generera tabellen med säljvinkeln tidigt.")
+st.title("🛡️ PA DAS Anbudbevakning")
+st.write("Klistra in råtexten från portalerna nedan. Appen rensar bort bygg/anläggning och sorterar på närmaste deadline.")
 
 # --- SIDOMENY MED SNABBLÄNKAR ---
 st.sidebar.header("🔗 Källor & Snabblänkar")
@@ -67,17 +68,28 @@ if st.button("🚀 Generera filtrerad säljtabell", type="primary", use_containe
     if not any([text_c1.strip(), text_c2.strip(), text_e.strip(), text_m.strip(), text_o.strip()]):
         st.warning("Du behöver klistra in text i minst en flik först!")
     else:
-        with st.spinner("Analyserar data, filtrerar bort bygg/anläggning och bygger tabell..."):
+        with st.spinner("Analyserar data, tolkar deadlines och bygger tabell..."):
+            
+            # Skicka med dagens datum så Claude kan räkna om t.ex. "2 days left" eller "Tomorrow"
+            today_str = datetime.now().strftime("%Y-%m-%d")
             
             prompt = f"""
-            Du är en expert på Business Development / GTM för PA Consulting inom Defence & Security och management. Analysera råtexten nedan från upphandlingsportaler.
+            Du är en expert på Business Development / GTM för PA Consulting inom Defence & Security och management. 
+            Dagens datum är {today_str}. 
+            Analysera råtexten nedan som har kopierats från upphandlingsportaler (precis som i filmerna du känner till).
             
-            VIKTIG REGLER FÖR FILtrERING:
-            - TA BORT ALLA upphandlingar som rör byggnation, anläggning, renovering av fastigheter, gatuarbeten, VVS, elinstallationer i byggnader eller traditionell entreprenad.
-            - Behåll ENDAST upphandlingar som rör: Försvar & Säkerhet, IT & Digitalisering, Managementkonsulttjänster, Strategi, Utbildning, Rådgivning, Systemutveckling eller analys.
+            REGLER FÖR FILTRERING:
+            1. TA BORT ALLA upphandlingar som rör byggnation, anläggning, renovering av fastigheter, gatuarbeten, VVS, elinstallationer i byggnader eller traditionell entreprenad.
+            2. Behåll ENDAST upphandlingar som rör: Försvar & Säkerhet, IT & Digitalisering, Managementkonsulttjänster, Strategi, Utbildning, Rådgivning, Systemutveckling, analys eller dylika tjänster.
+            
+            REGLER FÖR DEADLINE (Viktigt!):
+            - Leta efter texter som "Deadline", "2 days left", "Tomorrow", eller rena datum (t.ex. ÅÅÅÅ-MM-DD eller DD/MM).
+            - Om det står "X days left" eller "Tomorrow", räkna ut det faktiska datumet baserat på att dagsdatum är {today_str} och skriv om det till formatet ÅÅÅÅ-MM-DD.
+            - Om det står ett datum i texten, omvandla det till ÅÅÅÅ-MM-DD.
+            - Om det helt saknas datum/deadline, sätt "Ej angivet".
             
             Returnera resultatet ENDAST som en giltig JSON-lista med objekt för de relevanta upphandlingarna. Ingen inledande text, ingen markdown runt om. Varje objekt ska ha följande exakta nycklar (i denna ordning):
-            - "Deadline": (Datum i formatet ÅÅÅÅ-MM-DD om det finns, annars "Ej angivet")
+            - "Deadline": (Datum i formatet ÅÅÅÅ-MM-DD, eller "Ej angivet")
             - "Kategori": (T.ex. Försvar & Säkerhet, IT & Digitalisering, Management & Strategi)
             - "Myndighet": (Organisation/Köpare)
             - "Upphandling": (Titel på upphandlingen)
@@ -109,7 +121,7 @@ if st.button("🚀 Generera filtrerad säljtabell", type="primary", use_containe
                 
                 if not clean_json.endswith("]") and clean_json.startswith("["):
                     last_brace = clean_json.rfind("}")
-                    if last_brace != -1:
+                    if last_brace !=-1:
                         clean_json = clean_json[:last_brace+1] + "\n]"
                 
                 data = json.loads(clean_json)
