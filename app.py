@@ -15,7 +15,7 @@ client = genai.Client(api_key=api_key)
 if st.button("Kör enkel test-fråga"):
     try:
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.6-flash",
             contents="Svara bara med ett ord: Fungerar det?",
         )
         st.success(f"Svar från Gemini: {response.text}")
