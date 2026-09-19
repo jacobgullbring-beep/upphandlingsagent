@@ -1,136 +1,118 @@
-import streamlit as st
-import pandas as pd
-import feedparser
 import anthropic
+from bs4 import BeautifulSoup
+import pandas as pd
+import requests
+import streamlit as st
 
-# 1. Konfigurera Streamlit-sidan
 st.set_page_config(
-    page_title="PA Consulting - Upphandlingsbevakning",
-    page_icon="💼",
-    layout="wide"
+    page_title="GTM Upphandlingsbevakning", page_icon="🛡️", layout="wide"
 )
 
-st.title("💼 Upphandlingsbevakning & AI-analys via RSS")
-st.write("Hämtar automatiskt upphandlingar från ditt RSS-flöde och analyserar dem med Claude.")
-
-# 2. Hämta hemligheter från Streamlit Secrets
-api_key = st.secrets.get("ANTHROPIC_API_KEY")
-workspace_id = st.secrets.get("ANTHROPIC_WORKSPACE_ID")
-
-if not api_key:
-    st.error("❌ Saknar ANTHROPIC_API_KEY i Streamlit Secrets.")
-    st.stop()
-
-# Initiera Anthropic-klienten
-custom_headers = {}
-if workspace_id:
-    custom_headers["anthropic-workspace-id"] = workspace_id
-
-client = anthropic.Anthropic(
-    api_key=api_key,
-    default_headers=custom_headers if custom_headers else None
+st.title("🛡️ e-Avrop Bevakning & AI-analys")
+st.write(
+    "Hämtar publika upphandlingar automatiskt och låter Claude filtrera ut det"
+    " som är intressant för dig."
 )
 
-# 3. Sidomeny: RSS-länk och Sökfilter
-st.sidebar.header("📡 RSS-Inställningar")
-rss_url = st.sidebar.text_input(
-    "Klistra in RSS-länk från Mercell/e-Avrop:",
-    value="https://ted.europa.eu/api/v2/rss/searches?q=defence"  # Exempelflöde
+# Hämta API-nyckel från Streamlit secrets eller sidopanel
+api_key = st.secrets.get("ANTHROPIC_API_KEY") or st.sidebar.text_input(
+    "Anthropic API Key", type="password"
 )
 
-st.sidebar.divider()
-st.sidebar.header("🔍 Sök & Filter")
-search_term = st.sidebar.text_input("Sök nyckelord i flödet:", "")
+# Inställning för antal sidor att skrapa
+num_pages = st.sidebar.slider(
+    "Antal sidor att hämta från e-Avrop", min_w=1, max_value=5, value=2
+)
 
-# 4. Funktion för att hämta och tolka RSS-flödet
-@st.cache_data(ttl=900)
-def load_rss_data(url):
-    feed = feedparser.parse(url)
-    items = []
-    
-    for entry in feed.entries:
-        published = getattr(entry, "published", getattr(entry, "updated", "Ej angivet"))
-        summary = getattr(entry, "summary", getattr(entry, "description", ""))
-        
-        items.append({
-            "Publicerad": published,
-            "Titel": entry.title,
-            "Länk": entry.link,
-            "Beskrivning": summary
-        })
-    return pd.DataFrame(items)
 
-# 5. Hämta datan
-if rss_url:
+def fetch_e_avrop_pages(max_pages):
+  base_url = "https://www.e-avrop.com/e-Upphandling/Default.aspx"
+  headers = {
+      "User-Agent": (
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,"
+          " like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      )
+  }
+
+  tenders = []
+
+  for page in range(1, max_pages + 1):
+    url = f"{base_url}?page={page}" if page > 1 else base_url
     try:
-        df = load_rss_data(rss_url)
-        
-        if not df.empty:
-            # Fritextfilter
-            if search_term:
-                df = df[
-                    df["Titel"].str.contains(search_term, case=False, na=False) |
-                    df["Beskrivning"].str.contains(search_term, case=False, na=False)
-                ]
-            
-            st.metric("Antal hittade upphandlingar i flödet", len(df))
-            
-            # Huvudtabell med länkar
-            st.dataframe(
-                df[["Publicerad", "Titel", "Länk"]],
-                column_config={
-                    "Länk": st.column_config.LinkColumn("Källänk")
-                },
-                use_container_width=True
-            )
-            
-            st.divider()
-            
-            # AI-analysknapp
-            if st.button("🚀 Kör AI-analys på flödet med Claude", type="primary"):
-                with st.spinner("Analyserar upphandlingar med Claude Sonnet 5..."):
-                    results = []
-                    
-                    # Vi analyserar upp till de 5 senaste för att inte bränna tokens i onödan
-                    for idx, row in df.head(5).iterrows():
-                        prompt = f"""Följ instruktionerna exakt och svara enbart med den begärda analysen. Inled inte med några artighetsfraser eller hälsningar.
+      response = requests.get(url, headers=headers, timeout=10)
+      if response.status_code != 200:
+        break
 
-Analysera följande tilldelade offentliga upphandling ur ett sälj- och GTM-perspektiv (Go-To-Market) för konsultbolag:
-- Titel: {row['Titel']}
-- Beskrivning: {row['Beskrivning']}
+      soup = BeautifulSoup(response.text, "html.parser")
+      rows = soup.find_all("tr")
 
-Formatera ditt svar i Markdown med följande tre punkter:
-1. **Sammandrag:** Kort sammanfattning av vad avtalet gäller.
-2. **Underleverantörsmöjligheter:** Finns det öppningar för partners eller underkonsulter?
-3. **GTM-rekommendation:** Vad bör säljteamet fokusera på vid nästa liknande tillfälle?
-"""
-                        try:
-                            response = client.messages.create(
-                                model="claude-sonnet-5",
-                                max_tokens=800,
-                                messages=[{"role": "user", "content": prompt}]
-                            )
-                            analysis = response.content[0].text
-                        except Exception as e:
-                            analysis = f"Kunde inte generera analys: {e}"
-                        
-                        results.append({
-                            "Titel": row["Titel"],
-                            "Länk": row["Länk"],
-                            "Analys": analysis
-                        })
-                    
-                    st.success("✅ AI-analysen är klar!")
-                    
-                    st.subheader("📋 GTM-Analys av senaste upphandlingarna")
-                    for item in results:
-                        with st.expander(f"📌 {item['Titel']}"):
-                            st.markdown(item["Analys"])
-                            st.markdown(f"🔗 [Öppna källan]({item['Länk']})")
-        else:
-            st.warning("Hittade inga poster i detta RSS-flöde. Kontrollera länken.")
-            
+      for row in rows:
+        cols = row.find_all("td")
+        if len(cols) >= 5:
+          titel = cols[0].get_text(strip=True)
+          publicerad = cols[1].get_text(strip=True)
+          organisation = cols[2].get_text(strip=True)
+          kontext = cols[3].get_text(strip=True)
+          deadline = cols[4].get_text(strip=True)
+
+          if titel and organisation:
+            tenders.append({
+                "Titel": titel,
+                "Publicerad": publicerad,
+                "Organisation": organisation,
+                "Kontext": kontext,
+                "Deadline": deadline,
+            })
     except Exception as e:
-        st.error(f"Kunde inte läsa av RSS-flödet. Felmeddelande: {e}")
-else:
-    st.info("Klistra in en RSS-länk i sidomenyn till vänster för att komma igång.")
+      st.error(
+          f"Ett fel uppstod vid hämtning av sida {page}: {str(e)}"
+          )
+      break
+
+  return pd.DataFrame(tenders)
+
+
+if st.button("🚀 Hämta och analysera upphandlingar"):
+  if not api_key:
+    st.warning("Vänligen ange din Anthropic API-nyckel i sidopanelen eller secrets.")
+  else:
+    with st.spinner(
+        "Skrapar e-Avrop och låter Claude analysera resultaten..."
+    ):
+      df = fetch_e_avrop_pages(num_pages)
+
+      if df.empty:
+        st.warning(
+            "Kunde inga upphandlingar hittas. Kontrollera nätverket eller"
+            " sidstrukturen."
+        )
+      else:
+        st.success(f"Hittade totalt {len(df)} upphandlingar!")
+
+        # Konvertera dataframe till text för att skicka till Claude
+        data_text = df.to_json(orient="records", ensure_ascii=False)
+
+        # Anropa Claude
+        client = anthropic.Anthropic(api_key=api_key)
+        prompt = (
+            "Här är en lista på aktuella offentliga upphandlingar i JSON-format:"
+            f" \n\n{data_text}\n\nAnalysera denna lista. "
+            "Presentera de mest intressanta och relevanta upphandlingarna"
+            " (särskilt med fokus på management, konsulttjänster, IT och"
+            " försvars-/säkerhetssektorn om det finns). "
+            "Svara på svenska med en snygg och överskådlig sammanställning"
+            " (gärna i tabellformat eller tydliga punkter) och motivera varför"
+            " de är intressanta."
+        )
+
+        response = client.messages.create(
+            model="claude-3-5-sonnet-20241022",
+            max_tokens=2000,
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+        st.markdown("### 🤖 Claudes analys & filtrering")
+        st.markdown(response.content[0].text)
+
+        with st.expander("Visa rådata från alla hämtade sidor"):
+          st.dataframe(df)
