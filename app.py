@@ -15,7 +15,7 @@ if not api_key:
 
 client = anthropic.Anthropic(api_key=api_key)
 
-# Skapa flikar för portalerna inklusive e-Avrop
+# Skapa flikar för portalerna
 tab_kommers, tab_eavrop, tab_mercell, tab_fmv, tab_ovrig = st.tabs([
     "Kommers Annons", 
     "e-Avrop", 
@@ -78,19 +78,19 @@ if st.button("🚀 Analysera och kategorisera alla källor", type="primary", use
             ---
             
             Uppgift:
-            1. Gå igenom samtliga källor ovan och fånga upp **alla** separata upphandlingar, avtal eller tilldelningar. Du får absolut inte sålla bort någonting.
+            1. Gå igenom samtliga källor ovan och fånga upp alla separata upphandlingar, avtal eller tilldelningar. Du får absolut inte sålla bort någonting.
             2. Kategorisera varje upphandling i någon av följande huvudgrupper:
-               - 🛡️ **Försvar, Säkerhet & Beredskap**
-               - 💻 **IT, Digitalisering & Analysverktyg**
-               - 🏥 **Vård, Omsorg & Livsmedel**
-               - 🏗️ **Infrastruktur, Miljö, Fastighet & Entreprenad**
-               - 🏛️ **Övrigt / Allmän förvaltning**
+               - Försvar, Säkerhet & Beredskap
+               - IT, Digitalisering & Analysverktyg
+               - Vård, Omsorg & Livsmedel
+               - Infrastruktur, Miljö, Fastighet & Entreprenad
+               - Övrigt / Allmän förvaltning
             3. För varje träff, ange vilken källa den kom från och presentera den snyggt med:
-               - **Organisation / Myndighet:**
-               - **Titel / Upphandling:**
-               - **Källa:** 
-               - **Kort sammanfattning / Affärsmöjlighet:**
-               - **Potentiell säljvinkel:**
+               - Organisation / Myndighet:
+               - Titel / Upphandling:
+               - Källa: 
+               - Kort sammanfattning / Affärsmöjlighet:
+               - Potentiell säljvinkel:
             """
             
             try:
@@ -103,8 +103,12 @@ if st.button("🚀 Analysera och kategorisera alla källor", type="primary", use
                 answer_text = "".join([block.text for block in response.content if hasattr(block, "text")])
                 
                 if answer_text.strip():
+                    st.success("✅ Analysen är klar!")
                     st.markdown("### 📊 Samlad Kategoriserad Överblick")
-                    st.markdown(answer_text)
+                    
+                    # Använd en container för att säkerställa att innehållet laddas korrekt
+                    with st.container():
+                        st.write(answer_text)
                 else:
                     st.error("Fick ett tomt svar från Claude.")
                 
