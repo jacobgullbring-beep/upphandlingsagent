@@ -8,7 +8,7 @@ import os
 st.set_page_config(page_title="GTM Upphandlingsskrapare & Filter", page_icon="🔍", layout="wide")
 
 st.title("🛡️ e-Avrop Live-skrapare & Filtrering")
-st.write("Skrapar upphandlingar från e-Avrop med exakt kolumnmatchning.")
+st.write("Skrapar upphandlingar från e-Avrop med korrigerade kolumner.")
 
 api_key = st.secrets.get("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
 
@@ -40,18 +40,18 @@ def scrape_e_avrop(base_url):
                 rows = table.find_all('tr')
                 for row in rows:
                     cols = row.find_all('td')
-                    # e-Avrop har tabellrader med minst 4-5 kolumner för upphandlingar
-                    if len(cols) >= 4:
+                    # Säkerställ att raden har tillräckligt med kolumner för en upphandling
+                    if len(cols) >= 5:
                         cols_text = [col.text.strip() for col in cols]
                         
                         # Filtrera bort skräprader (navigering, sidnummer, knappar)
-                        if len(cols_text[0]) > 2 and "Logga in" not in cols_text[0] and "Bevaka" not in cols_text[0]:
+                        if cols_text[0] and "Logga in" not in cols_text[0] and "Bevaka" not in cols_text[0] and not cols_text[0].isdigit():
                             all_tenders.append({
                                 "Titel": cols_text[0],
-                                "Publicerad": cols_text[1] if len(cols_text) > 1 else "",
-                                "Organisation": cols_text[2] if len(cols_text) > 2 else "",
-                                "Kontext / CPV": cols_text[3] if len(cols_text) > 3 else "",
-                                "Deadline": cols_text[4] if len(cols_text) > 4 else ""
+                                "Publicerad": cols_text[1],
+                                "Organisation": cols_text[2],
+                                "Kontext / CPV": cols_text[3],
+                                "Deadline": cols_text[4]
                             })
                             
         except Exception as e:
