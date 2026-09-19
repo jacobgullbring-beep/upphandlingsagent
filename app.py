@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import anthropic
+import google.generativeai as genai
 import os
 from dotenv import load_dotenv
 
@@ -11,13 +11,15 @@ st.set_page_config(page_title="GTM Defence & Security - Upphandlingsbevakning", 
 st.title("🛡️ GTM Upphandlingsbevakning & Säljinsikter")
 st.write("Automatisk sammanställning av klara offentliga upphandlingar med fokuserade säljananalyser.")
 
-api_key = os.getenv("ANTHROPIC_API_KEY")
+# Hämta Gemini API-nyckel från miljövariabler eller Streamlit secrets
+api_key = os.getenv("GEMINI_API_KEY") or (st.secrets["GEMINI_API_KEY"] if "GEMINI_API_KEY" in st.secrets else None)
 
 if not api_key:
-    st.error("Ingen Anthropic API-nyckel hittades. Lägg till ANTHROPIC_API_KEY i dina Secrets/miljövariabler.")
+    st.error("Ingen Gemini API-nyckel hittades. Lägg till GEMINI_API_KEY i dina Secrets på Streamlit Cloud.")
     st.stop()
 
-client = anthropic.Anthropic(api_key=api_key)
+genai.configure(api_key=api_key)
+model = genai.GenerativeModel("gemini-1.5-flash")
 
 # Filter i sidomenyn
 st.sidebar.header("🔍 Filter")
@@ -52,10 +54,9 @@ def fetch_tender_data():
     ]
 
 if st.button("🚀 Hämta & Analysera Senaste Tilldelningarna", type="primary"):
-    with st.spinner("Hämtar upphandlingar och analyserar säljmöjligheter med Claude..."):
+    with st.spinner("Hämtar upphandlingar och analyserar säljmöjligheter med Gemini..."):
         all_tenders = fetch_tender_data()
         
-        # Filtrering utifrån användarens val
         if kategori_filter == "Endast Försvar & Säkerhet (FMV, MSB, Polisen m.fl.)":
             filtered_tenders = [t for t in all_tenders if t["Sektor"] == "Försvar & Säkerhet"]
         elif kategori_filter == "Övrig offentlig sektor":
@@ -80,17 +81,13 @@ if st.button("🚀 Hämta & Analysera Senaste Tilldelningarna", type="primary"):
                - Hur kan GTM-teamet agera på detta? (T.ex. kontakta myndigheten för tilläggstjänster/förändringsledning, eller kontakta den vinnande leverantören som underleverantör/partner inom specialkompetens).
             """
             
-            response = client.messages.create(
-                model="claude-3-5-sonnet-latest",
-                max_tokens=600,
-                messages=[{"role": "user", "content": prompt}]
-            )
+            response = model.generate_content(prompt)
             
             results.append({
                 "Sektor": item["Sektor"],
                 "Myndighet": item["Myndighet"],
                 "Upphandling": item["Titel"],
-                "Claudes GTM-Analys": response.content[0].text
+                "GTM-Analys": response.text
             })
             
         df = pd.DataFrame(results)
@@ -98,4 +95,4 @@ if st.button("🚀 Hämta & Analysera Senaste Tilldelningarna", type="primary"):
         
         for idx, row in df.iterrows():
             with st.expander(f"📌 [{row['Sektor']}] {row['Myndighet']} – {row['Upphandling']}"):
-                st.markdown(row["Claudes GTM-Analys"])
+                st.markdown(row["GTM-Analys"])
