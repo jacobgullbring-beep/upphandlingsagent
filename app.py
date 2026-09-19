@@ -109,19 +109,19 @@ if st.button("🚀 Generera tabell för Kommun & Region", type="primary", use_co
                 
                 raw_output = "".join([block.text for block in response.content if hasattr(block, "text")])
                 
+                # --- SÄKERHETSRENSNING AV JSON ---
                 clean_json = raw_output.strip()
-                if clean_json.startswith("```json"):
-                    clean_json = clean_json[7:]
-                if clean_json.startswith("```"):
-                    clean_json = clean_json[3:]
-                if clean_json.endswith("```"):
-                    clean_json = clean_json[:-3]
+                if "```json" in clean_json:
+                    clean_json = clean_json.split("```json")[1]
+                if "```" in clean_json:
+                    clean_json = clean_json.split("```")[0]
                 clean_json = clean_json.strip()
                 
-                if not clean_json.endswith("]") and clean_json.startswith("["):
-                    last_brace = clean_json.rfind("}")
-                    if last_brace != -1:
-                        clean_json = clean_json[:last_brace+1] + "\n]"
+                start_idx = clean_json.find("[")
+                end_idx = clean_json.rfind("]")
+                
+                if start_idx != -1 and end_idx != -1:
+                    clean_json = clean_json[start_idx:end_idx+1]
                 
                 data = json.loads(clean_json)
                 df = pd.DataFrame(data)
@@ -138,4 +138,4 @@ if st.button("🚀 Generera tabell för Kommun & Region", type="primary", use_co
                     st.warning("Hittade inga relevanta upphandlingar efter filtrering.")
                     
             except Exception as e:
-                st.error(f"Kunde inte tolka datat till tabell. Här är det råa svaret:\n\n{raw_output}")
+                st.error(f"Kunde inte tolka datat till tabell. Felmeddelande: {e}\n\nHär är det råa svaret från AI:\n\n{raw_output}")
