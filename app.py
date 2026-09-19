@@ -15,7 +15,7 @@ if not api_key:
 
 client = anthropic.Anthropic(api_key=api_key)
 
-# Skapa flikar för portalerna
+# Skapa flikar för portalerna inklusive e-Avrop
 tab_kommers, tab_eavrop, tab_mercell, tab_fmv, tab_ovrig = st.tabs([
     "Kommers Annons", 
     "e-Avrop", 
@@ -48,7 +48,6 @@ st.markdown("---")
 
 if st.button("🚀 Analysera och kategorisera alla källor", type="primary", use_container_width=True):
     
-    # Samla ihop allt
     combined_input = f"""
     ### [KÄLLA: KOMMERS ANNONS]
     {text_kommers if text_kommers.strip() else "Ingen data inmatad."}
@@ -101,17 +100,13 @@ if st.button("🚀 Analysera och kategorisera alla källor", type="primary", use
                     messages=[{"role": "user", "content": prompt}]
                 )
                 
-                # Extrahera texten ordentligt
-                answer_text = ""
-                for block in response.content:
-                    if hasattr(block, "text"):
-                        answer_text += block.text
+                answer_text = "".join([block.text for block in response.content if hasattr(block, "text")])
                 
                 if answer_text.strip():
                     st.markdown("### 📊 Samlad Kategoriserad Överblick")
                     st.markdown(answer_text)
                 else:
-                    st.error("Fick ett tomt svar från Claude. Kontrollera att modellnamnet och nyckeln fungerar.")
+                    st.error("Fick ett tomt svar från Claude.")
                 
             except Exception as e:
                 st.error(f"Ett fel uppstod vid anropet till Claude: {e}")
