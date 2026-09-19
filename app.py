@@ -8,12 +8,12 @@ import os
 st.set_page_config(page_title="GTM Upphandlingsskrapare & Filter", page_icon="🔍", layout="wide")
 
 st.title("🛡️ e-Avrop Live-skrapare & Filtrering")
-st.write("Skrapar automatiskt upphandlingar från e-Avrop och rensar bort gränssnittstext.")
+st.write("Skrapar upphandlingar från e-Avrop med exakt kolumnmatchning.")
 
 api_key = st.secrets.get("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
 
 if not api_key:
-    st.error("Ingen Anthropic API-nyckel hittades. Lägg till ANTHROPIC_API_KEY i dina Streamlit Secrets.")
+    st.error("Ingen Anthropic API-nyckel hittades under Streamlit Secrets.")
     st.stop()
 
 client = anthropic.Anthropic(api_key=api_key)
@@ -34,24 +34,24 @@ def scrape_e_avrop(base_url):
                 return pd.DataFrame()
             
             soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # Leta efter tabeller på sidan som innehåller datarader
             tables = soup.find_all('table')
+            
             for table in tables:
                 rows = table.find_all('tr')
                 for row in rows:
-                    cols = row.find_all(['td', 'th'])
-                    if len(cols) >= 2:
+                    cols = row.find_all('td')
+                    # e-Avrop har tabellrader med minst 4-5 kolumner för upphandlingar
+                    if len(cols) >= 4:
                         cols_text = [col.text.strip() for col in cols]
                         
-                        # Filtrera bort rader som bara är knappar eller menyer ("Bevaka", tomma osv)
-                        cleaned_cols = [c for c in cols_text if c and "Bevaka" not in c and "Sök" not in c]
-                        
-                        if len(cleaned_cols) >= 2:
+                        # Filtrera bort skräprader (navigering, sidnummer, knappar)
+                        if len(cols_text[0]) > 2 and "Logga in" not in cols_text[0] and "Bevaka" not in cols_text[0]:
                             all_tenders.append({
-                                "Information": cleaned_cols[0],
-                                "Detalj / Organisation": cleaned_cols[1] if len(cleaned_cols) > 1 else "",
-                                "Övrigt": cleaned_cols[2] if len(cleaned_cols) > 2 else ""
+                                "Titel": cols_text[0],
+                                "Publicerad": cols_text[1] if len(cols_text) > 1 else "",
+                                "Organisation": cols_text[2] if len(cols_text) > 2 else "",
+                                "Kontext / CPV": cols_text[3] if len(cols_text) > 3 else "",
+                                "Deadline": cols_text[4] if len(cols_text) > 4 else ""
                             })
                             
         except Exception as e:
@@ -64,15 +64,15 @@ if st.button("🚀 Starta skrapning", type="primary"):
     
     if not df_result.empty:
         st.session_state['tender_df'] = df_result
-        st.success(f"Klart! Hittade {len(df_result)} unika rader.")
+        st.success(f"Klart! Hittade {len(df_result)} giltiga upphandlingar.")
     else:
-        st.error("Ingen data hittades. Sidan kan kräva inloggning eller JavaScript-exekvering (t.ex. Selenium) för att visa tabellinnehållet.")
+        st.error("Ingen data hittades.")
 
 if 'tender_df' in st.session_state and not st.session_state['tender_df'].empty:
     st.markdown("---")
     st.subheader("🔍 Filtrera och Sök i Upphandlingar")
     
-    search_query = st.text_input("Sök i tabellen:")
+    search_query = st.text_input("Sök i tabellen (t.ex. Region, IT, säkerhet):")
     df_to_show = st.session_state['tender_df']
     
     if search_query:
