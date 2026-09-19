@@ -16,9 +16,10 @@ if not api_key:
 
 client = anthropic.Anthropic(api_key=api_key)
 
-# Skapa flikar för de vanligaste portalerna
-tab_kommers, tab_mercell, tab_fmv, tab_ovrig = st.tabs([
+# Skapa flikar för portalerna
+tab_kommers, tab_eavrop, tab_mercell, tab_fmv, tab_ovrig = st.tabs([
     "Kommers Annons", 
+    "e-Avrop", 
     "Mercell", 
     "FMV / Direkt", 
     "Övrig Källa"
@@ -27,6 +28,10 @@ tab_kommers, tab_mercell, tab_fmv, tab_ovrig = st.tabs([
 with tab_kommers:
     st.subheader("Kommers Annons")
     text_kommers = st.text_area("Klistra in urklipp från Kommers Annons:", height=200, key="kommers")
+
+with tab_eavrop:
+    st.subheader("e-Avrop")
+    text_eavrop = st.text_area("Klistra in urklipp från e-Avrop:", height=200, key="eavrop")
 
 with tab_mercell:
     st.subheader("Mercell")
@@ -48,6 +53,9 @@ if st.button("🚀 Analysera och kategorisera alla källor", type="primary", use
     ### [KÄLLA: KOMMERS ANNONS]
     {text_kommers if text_kommers.strip() else "Ingen data inmatad."}
 
+    ### [KÄLLA: E-AVROP]
+    {text_eavrop if text_eavrop.strip() else "Ingen data inmatad."}
+
     ### [KÄLLA: MERCELL]
     {text_mercell if text_mercell.strip() else "Ingen data inmatad."}
 
@@ -58,7 +66,7 @@ if st.button("🚀 Analysera och kategorisera alla källor", type="primary", use
     {text_ovrig if text_ovrig.strip() else "Ingen data inmatad."}
     """
     
-    if not any([text_kommers.strip(), text_mercell.strip(), text_fmv.strip(), text_ovrig.strip()]):
+    if not any([text_kommers.strip(), text_eavrop.strip(), text_mercell.strip(), text_fmv.strip(), text_ovrig.strip()]):
         st.warning("Du behöver klistra in text i minst en av textrutorna först!")
     else:
         with st.spinner("Claude sammanställer, rensar bort skräp och kategoriserar samtliga upphandlingar..."):
@@ -78,7 +86,7 @@ if st.button("🚀 Analysera och kategorisera alla källor", type="primary", use
                - 🏥 **Vård, Omsorg & Livsmedel**
                - 🏗️ **Infrastruktur, Miljö, Fastighet & Entreprenad**
                - 🏛️ **Övrigt / Allmän förvaltning**
-            3. För varje träff, ange vilken källa den kom från (t.ex. Kommers Annons eller Mercell) och presentera den snyggt med:
+            3. För varje träff, ange vilken källa den kom från (t.ex. Kommers Annons, e-Avrop eller Mercell) och presentera den snyggt med:
                - **Organisation / Myndighet:**
                - **Titel / Upphandling:**
                - **Källa:** 
