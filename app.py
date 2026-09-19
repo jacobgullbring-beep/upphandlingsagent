@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import feedparser
 
 # 1. Konfigurera Streamlit-sidan
 st.set_page_config(
@@ -8,113 +9,78 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("💼 Upphandlingsbevakning & Källportal")
-st.write("Sök, filtrera och bevaka offentliga tilldelningar och upphandlingar.")
+st.title("💼 Upphandlingsbevakning via RSS")
+st.write("Automatisk inläsning av de senaste tilldelningarna och upphandlingarna från dina bevakningsflöden.")
 
-# 2. Datakälla för upphandlingar (med direktlänkar till källan)
-def fetch_tender_data():
-    return [
-        {
-            "Datum": "2026-09-18",
-            "Källa": "FMV",
-            "Sektor": "Försvar & Säkerhet",
-            "Köpare / Myndighet": "Försvarets materielverk (FMV)",
-            "Titel": "Ramavtal IT-konsulttjänster inom Cybersäkerhet & Ledningssystem",
-            "Vinnande Leverantör": "CyberTech Solutions AB",
-            "Kontraktsvärde": "15 000 000 SEK",
-            "Länk": "https://www.fmv.se/upphandlingar/",
-            "Beskrivning": "Avtalet omfattar expertstöd inom cybersäkerhet, informationssäkerhet samt granskning av säkra kommunikationssystem under 2 år."
-        },
-        {
-            "Datum": "2026-09-17",
-            "Källa": "e-Avrop",
-            "Sektor": "Övrig offentlig sektor",
-            "Köpare / Myndighet": "Region Stockholm",
-            "Titel": "Projektledning och Förändringsledning för Verksamhetsutveckling",
-            "Vinnande Leverantör": "Consulting Group Nordic AB",
-            "Kontraktsvärde": "8 500 000 SEK",
-            "Länk": "https://www.e-avrop.com/",
-            "Beskrivning": "Konsulttjänster för stöd vid digital transformation och implementering av nya arbetssätt inom hälso- och sjukvården."
-        },
-        {
-            "Datum": "2026-09-15",
-            "Källa": "Mercell",
-            "Sektor": "Försvar & Säkerhet",
-            "Köpare / Myndighet": "MSB (Myndigheten för samhällsskydd och beredskap)",
-            "Titel": "Rådgivning och Strateger inom Totalförsvar & Beredskap",
-            "Vinnande Leverantör": "Defence Consulting Nordics AB",
-            "Kontraktsvärde": "12 000 000 SEK",
-            "Länk": "https://www.mercell.com/sv-se/upphandlingar.aspx",
-            "Beskrivning": "Strategisk rådgivning och utredningsstöd avseende totalförsvarets uppbyggnad och försörjningsberedskap."
-        }
-    ]
+# 2. Sidomeny för RSS-länk och Filter
+st.sidebar.header("📡 RSS-Inställningar")
 
-# Hämta data
-tenders = fetch_tender_data()
-df = pd.DataFrame(tenders)
-
-# 3. Sidomeny: Direktlänkar till portalerna
-st.sidebar.header("🌐 Direktlänkar till Portaler")
-st.sidebar.markdown("""
-* 🛡️ [FMV Upphandlingar](https://www.fmv.se/upphandlingar/)
-* 📦 [e-Avrop](https://www.e-avrop.com/)
-* 📊 [Mercell Sverige](https://www.mercell.com/sv-se/upphandlingar.aspx)
-* 🇪🇺 [TED (Tenders Electronic Daily)](https://ted.europa.eu/)
-* 🏛️ [Kommers Annons](https://www.kommersannons.se/)
-""")
+# Exempel-RSS eller skriv in egen
+rss_url = st.sidebar.text_input(
+    "Klistra in RSS-länk från Mercell/e-Avrop:",
+    value="https://ted.europa.eu/api/v2/rss/searches?q=defence"  # Exempelflöde för försvarsupphandlingar i EU
+)
 
 st.sidebar.divider()
 st.sidebar.header("🔍 Sök & Filter")
+search_term = st.sidebar.text_input("Sök i rubrik eller beskrivning:", "")
 
-# Fritextsökning
-search_term = st.sidebar.text_input("Sök nyckelord (t.ex. myndighet, tjänst eller vinnare):", "")
+# 3. Funktion för att hämta och tolka RSS-flödet
+@st.cache_data(ttl=900) # Cachar datan i 15 minuter så det går snabbt
+def load_rss_data(url):
+    feed = feedparser.parse(url)
+    items = []
+    
+    for entry in feed.entries:
+        # Hämtar publiceringsdatum, titel, länk och sammanfattning/beskrivning
+        published = getattr(entry, "published", getattr(entry, "updated", "Ej angivet"))
+        summary = getattr(entry, "summary", getattr(entry, "description", ""))
+        
+        items.append({
+            "Publicerad": published,
+            "Titel": entry.title,
+            "Länk": entry.link,
+            "Beskrivning": summary
+        })
+    return pd.DataFrame(items)
 
-# Sektorfilter
-sektor_options = ["Alla sektorer"] + list(df["Sektor"].unique())
-selected_sektor = st.sidebar.selectbox("Välj Sektor:", sektor_options)
-
-# Källfilter
-kalla_options = ["Alla källor"] + list(df["Källa"].unique())
-selected_kalla = st.sidebar.selectbox("Välj Källa:", kalla_options)
-
-# 4. Applicera filter
-filtered_df = df.copy()
-
-if selected_sektor != "Alla sektorer":
-    filtered_df = filtered_df[filtered_df["Sektor"] == selected_sektor]
-
-if selected_kalla != "Alla källor":
-    filtered_df = filtered_df[filtered_df["Källa"] == selected_kalla]
-
-if search_term:
-    filtered_df = filtered_df[
-        filtered_df["Titel"].str.contains(search_term, case=False, na=False) |
-        filtered_df["Köpare / Myndighet"].str.contains(search_term, case=False, na=False) |
-        filtered_df["Vinnande Leverantör"].str.contains(search_term, case=False, na=False) |
-        filtered_df["Beskrivning"].str.contains(search_term, case=False, na=False)
-    ]
-
-# 5. Visa resultat
-st.metric("Antal träffar", len(filtered_df))
-
-# Huvudtabell med länkar
-st.dataframe(
-    filtered_df[["Datum", "Källa", "Sektor", "Köpare / Myndighet", "Titel", "Vinnande Leverantör", "Kontraktsvärde", "Länk"]],
-    column_config={
-        "Länk": st.column_config.LinkColumn("Källänk")
-    },
-    use_container_width=True
-)
-
-st.divider()
-
-# Detaljvy för varje upphandling
-st.subheader("📋 Detaljer om valda upphandlingar")
-for idx, row in filtered_df.iterrows():
-    with st.expander(f"📌 {row['Köpare / Myndighet']} – {row['Titel']}"):
-        st.write(f"**Datum:** {row['Datum']}")
-        st.write(f"**Källa:** {row['Källa']} ({row['Sektor']})")
-        st.write(f"**Vinnande leverantör:** {row['Vinnande Leverantör']}")
-        st.write(f"**Kontraktsvärde:** {row['Kontraktsvärde']}")
-        st.write(f"**Beskrivning:** {row['Beskrivning']}")
-        st.markdown(f"🔗 [Öppna upphandlingen hos källan ({row['Källa']})]({row['Länk']})")
+# 4. Hämta och visa datan
+if rss_url:
+    try:
+        df = load_rss_data(rss_url)
+        
+        if not df.empty:
+            # Applicera fritextfilter om användaren söker
+            if search_term:
+                df = df[
+                    df["Titel"].str.contains(search_term, case=False, na=False) |
+                    df["Beskrivning"].str.contains(search_term, case=False, na=False)
+                ]
+            
+            st.metric("Antal hittade upphandlingar i flödet", len(df))
+            
+            # Huvudtabell med klickbara länkar
+            st.dataframe(
+                df[["Publicerad", "Titel", "Länk"]],
+                column_config={
+                    "Länk": st.column_config.LinkColumn("Öppna källa")
+                },
+                use_container_width=True
+            )
+            
+            st.divider()
+            
+            # Detaljvy för varje kort
+            st.subheader("📋 Detaljerade notiser")
+            for idx, row in df.iterrows():
+                with st.expander(f"📌 {row['Titel']}"):
+                    st.write(f"**Publicerad:** {row['Publicerad']}")
+                    st.write(f"**Beskrivning:** {row['Beskrivning']}")
+                    st.markdown(f"🔗 [Läs hela upphandlingen hos källan]({row['Länk']})")
+        else:
+            st.warning("Hittade inga poster i detta RSS-flöde. Kontrollera länken.")
+            
+    except Exception as e:
+        st.error(f"Kunde inte läsa av RSS-flödet. Felmeddelande: {e}")
+else:
+    st.info("Klistra in en RSS-länk i sidomenyn till vänster för att läsa in upphandlingar.")
