@@ -9,7 +9,7 @@ load_dotenv()
 st.set_page_config(page_title="GTM Defence & Security - Upphandlingsbevakning", layout="wide")
 
 st.title("🛡️ GTM Upphandlingsbevakning & Säljinsikter")
-st.write("Automatisk sammanställning av klara offentliga upphandlingar med fokuserade säljananalyser.")
+st.write("Automatisk sammanställning av klara offentliga upphandlingar med fokuserade sälljananalyser.")
 
 api_key = os.getenv("ANTHROPIC_API_KEY")
 
@@ -80,22 +80,26 @@ if st.button("🚀 Hämta & Analysera Senaste Tilldelningarna", type="primary"):
                - Hur kan GTM-teamet agera på detta? (T.ex. kontakta myndigheten för tilläggstjänster/förändringsledning, eller kontakta den vinnande leverantören som underleverantör/partner inom specialkompetens).
             """
             
-            response = client.messages.create(
-                model="claude-3-5-sonnet-20241022",
-                max_tokens=600,
-                messages=[{"role": "user", "content": prompt}]
-            )
+            try:
+                response = client.messages.create(
+                    model="claude-3-5-sonnet-20241022",
+                    max_tokens=600,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                
+                results.append({
+                    "Sektor": item["Sektor"],
+                    "Myndighet": item["Myndighet"],
+                    "Upphandling": item["Titel"],
+                    "Claudes GTM-Analys": response.content[0].text
+                })
+            except Exception as e:
+                st.error(f"Ett fel uppstod vid anrop till Claude för {item['Titel']}: {e}")
             
-            results.append({
-                "Sektor": item["Sektor"],
-                "Myndighet": item["Myndighet"],
-                "Upphandling": item["Titel"],
-                "Claudes GTM-Analys": response.content[0].text
-            })
+        if results:
+            df = pd.DataFrame(results)
+            st.success(f"✅ Analys klar! Hittade {len(df)} relevanta upphandlingar.")
             
-        df = pd.DataFrame(results)
-        st.success(f"✅ Analys klar! Hittade {len(df)} relevanta upphandlingar.")
-        
-        for idx, row in df.iterrows():
-            with st.expander(f"📌 [{row['Sektor']}] {row['Myndighet']} – {row['Upphandling']}"):
-                st.markdown(row["Claudes GTM-Analys"])
+            for idx, row in df.iterrows():
+                with st.expander(f"📌 [{row['Sektor']}] {row['Myndighet']} – {row['Upphandling']}"):
+                    st.markdown(row["Claudes GTM-Analys"])
