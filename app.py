@@ -6,8 +6,16 @@ import json
 
 st.set_page_config(page_title="GTM Upphandlingsbevakning", page_icon="🛡️", layout="wide")
 
-st.title("🛡️ GTM Säljbevakning – Interaktiv Tabell")
-st.write("Klistra in råtexten från portaler nedan. Svaret struktureras i en filtreringsbar tabell med fokus på deadlines.")
+st.title("🛡️ GTM Säljbevakning – Med direktlänkar")
+st.write("Använd snabblänkarna nedan för att hämta rådata från respektive portal, klistra in och generera tabellen.")
+
+# --- SIDOMENY MED SNABBLÄNKAR ---
+st.sidebar.header("🔗 Källor & Snabblänkar")
+st.sidebar.markdown("Klicka för att öppna portalen i ett nytt fönster:")
+st.sidebar.markdown("- [e-Avrop](https://www.e-avrop.com/e-Upphandling/Default.aspx)")
+st.sidebar.markdown("- [Kommers Annons (Notices)](https://www.kommersannons.se/Notices/TenderNotices)")
+st.sidebar.markdown("- [Kommers Annons (eLite)](https://www.kommersannons.se/eLite/Notice/NoticeList.aspx)")
+st.sidebar.markdown("- [Mercell (Sverige)](https://app.mercell.com/search?filter=delivery_place_code%3ASE)")
 
 api_key = st.secrets.get("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
 
@@ -18,61 +26,62 @@ if not api_key:
 client = anthropic.Anthropic(api_key=api_key)
 
 # Flikar för portalerna
-tab_kommers, tab_eavrop, tab_mercell, tab_fmv, tab_ovrig = st.tabs([
-    "Kommers Annons", 
+tab_kommers_1, tab_kommers_2, tab_eavrop, tab_mercell, tab_ovrig = st.tabs([
+    "Kommers Annons (Notices)", 
+    "Kommers Annons (eLite)", 
     "e-Avrop", 
     "Mercell", 
-    "FMV / Direkt", 
-    "Övrig Källa"
+    "Övrigt / FMV"
 ])
 
-with tab_kommers:
-    text_kommers = st.text_area("Kommers Annons:", height=150, key="kommers")
+with tab_kommers_1:
+    text_c1 = st.text_area("Klistra in från Kommers Annons (Notices):", height=150, key="c1")
+
+with tab_kommers_2:
+    text_c2 = st.text_area("Klistra in från Kommers Annons (eLite):", height=150, key="c2")
 
 with tab_eavrop:
-    text_eavrop = st.text_area("e-Avrop:", height=150, key="eavrop")
+    text_e = st.text_area("Klistra in från e-Avrop:", height=150, key="e")
 
 with tab_mercell:
-    text_mercell = st.text_area("Mercell:", height=150, key="mercell")
-
-with tab_fmv:
-    text_fmv = st.text_area("FMV / Direkt:", height=150, key="fmv")
+    text_m = st.text_area("Klistra in från Mercell:", height=150, key="m")
 
 with tab_ovrig:
-    text_ovrig = st.text_area("Övrig Källa:", height=150, key="ovrig")
+    text_o = st.text_area("Klistra in från Övrig Källa / FMV:", height=150, key="o")
 
 st.markdown("---")
 
 if st.button("🚀 Generera säljtabell med deadlines", type="primary", use_container_width=True):
     
     combined_input = f"""
-    ### [KÄLLA: KOMMERS ANNONS]
-    {text_kommers if text_kommers.strip() else "Ej data."}
-    ### [KÄLLA: E-AVROP]
-    {text_eavrop if text_eavrop.strip() else "Ej data."}
-    ### [KÄLLA: MERCELL]
-    {text_mercell if text_mercell.strip() else "Ej data."}
-    ### [KÄLLA: FMV / DIREKT]
-    {text_fmv if text_fmv.strip() else "Ej data."}
-    ### [KÄLLA: ÖVRIG]
-    {text_ovrig if text_ovrig.strip() else "Ej data."}
+    ### [KÄLLA: Kommers Annons (Notices) - https://www.kommersannons.se/Notices/TenderNotices]
+    {text_c1 if text_c1.strip() else "Ej data."}
+    ### [KÄLLA: Kommers Annons (eLite) - https://www.kommersannons.se/eLite/Notice/NoticeList.aspx]
+    {text_c2 if text_c2.strip() else "Ej data."}
+    ### [KÄLLA: e-Avrop - https://www.e-avrop.com/e-Upphandling/Default.aspx]
+    {text_e if text_e.strip() else "Ej data."}
+    ### [KÄLLA: Mercell - https://app.mercell.com/search?filter=delivery_place_code%3ASE]
+    {text_m if text_m.strip() else "Ej data."}
+    ### [KÄLLA: Övrigt / FMV]
+    {text_o if text_o.strip() else "Ej data."}
     """
     
-    if not any([text_kommers.strip(), text_eavrop.strip(), text_mercell.strip(), text_fmv.strip(), text_ovrig.strip()]):
+    if not any([text_c1.strip(), text_c2.strip(), text_e.strip(), text_m.strip(), text_o.strip()]):
         st.warning("Du behöver klistra in text i minst en flik först!")
     else:
-        with st.spinner("Analyserar datum, deadlines och strukturerar tabellen..."):
+        with st.spinner("Analyserar datum, deadlines och bygger tabell..."):
             
             prompt = f"""
-            Du är en expert på Business Development / GTM för konsultbolag. Analysera råtexten nedan från upphandlingsportaler.
+            Du är en expert på Business Development / GTM för konsultbolag. Analysera råtexten nedan från upphandlingsportaler. Varje källrubrik innehåller en URL.
             
-            Returnera resultatet ENDAST som en giltig JSON-lista med objekt. Ingen inledande text, ingen markdown-kodblock runt om om det inte behövs, men helst ren JSON eller en JSON-array. Varje objekt i listan ska ha följande exakta nycklar:
+            Returnera resultatet ENDAST som en giltig JSON-lista med objekt. Ingen inledande text, ingen markdown runt om. Varje objekt ska ha följande exakta nycklar:
             - "Deadline": (Datum i formatet ÅÅÅÅ-MM-DD om det finns, annars "Ej angivet")
             - "Kategori": (T.ex. Försvar & Säkerhet, IT & Digitalisering, Vård & Omsorg, Infrastruktur, Övrigt)
             - "Myndighet": (Organisation/Köpare)
             - "Upphandling": (Titel på upphandlingen)
-            - "Källa": (Vilken plattform det kom från)
-            - "Säljvinkel": (Kort rekommendation för GTM-teamet / hur man agerar)
+            - "Källa": (Vilken plattform det kom från, t.ex. e-Avrop, Mercell, Kommers Annons)
+            - "Käll-länk": (URL till respektive plattform som angavs i källhuvudet ovan)
+            - "Säljvinkel": (Kort rekommendation för GTM-teamet)
 
             Råtext att analysera:
             {combined_input}
@@ -87,7 +96,6 @@ if st.button("🚀 Generera säljtabell med deadlines", type="primary", use_cont
                 
                 raw_output = "".join([block.text for block in response.content if hasattr(block, "text")])
                 
-                # Försök städa bort eventuell markdown-formatering runt JSON om modellen la till det
                 clean_json = raw_output.strip()
                 if clean_json.startswith("```json"):
                     clean_json = clean_json[7:]
@@ -103,17 +111,15 @@ if st.button("🚀 Generera säljtabell med deadlines", type="primary", use_cont
                 if not df.empty:
                     st.success(f"✅ Hittade {len(df)} upphandlingar!")
                     
-                    # Sortera efter deadline om kolumnen finns
                     if "Deadline" in df.columns:
                         df = df.sort_values(by="Deadline", ascending=True)
                     
                     st.markdown("### 📊 Interaktiv Sälj- och Deadline-tabell")
-                    st.write("Klicka på kolumnrubrikerna för att sortera. Du kan söka i tabellen via sökikonen uppe till höger i tabellvyn.")
+                    st.write("Sorterad efter närmaste deadline. Klicka på länkarna i tabellen eller sidomenyn för att komma direkt till källan.")
                     
-                    # Visa interaktiv tabell
                     st.dataframe(df, use_container_width=True, hide_index=True)
                 else:
                     st.warning("Hittade inga strukturerade upphandlingar i texten.")
                     
             except Exception as e:
-                st.error(f"Kunde inte tolka datat till tabell. Här är det råa svaret från modellen om det strulade:\n\n{raw_output}")
+                st.error(f"Kunde inte tolka datat till tabell. Här är det råa svaret:\n\n{raw_output}")
