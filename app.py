@@ -7,7 +7,7 @@ st.set_page_config(page_title="GTM Defence & Security - Upphandlingsbevakning", 
 st.title("🛡️ GTM Upphandlingsbevakning & Säljinsikter")
 st.write("Automatisk sammanställning av klara offentliga upphandlingar med fokuserade säljanalyser.")
 
-# Hämta API-nyckeln säkert från Streamlit Cloud Secrets (eller st.secrets)
+# Hämta API-nyckeln säkert från Streamlit Cloud Secrets
 try:
     api_key = st.secrets["ANTHROPIC_API_KEY"]
 except Exception:
@@ -80,7 +80,7 @@ if st.button("🚀 Hämta & Analysera Senaste Tilldelningarna", type="primary"):
             
             try:
                 response = client.messages.create(
-                    model="claude-3-haiku-latest",
+                    model="claude-3-haiku-20240307",
                     max_tokens=600,
                     messages=[{"role": "user", "content": prompt}]
                 )
