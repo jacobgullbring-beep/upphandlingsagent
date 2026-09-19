@@ -11,7 +11,7 @@ st.set_page_config(
 )
 
 st.title("💼 Upphandlingsagent & Analys")
-st.write("Hämtar och analyserar senaste tilldelade upphandlingar med Claude 3.5 Sonnet.")
+st.write("Hämtar och analyserar senaste tilldelade upphandlingar med Claude.")
 
 # 2. Hämta API-nyckel och Workspace ID från secrets eller miljövariabler
 api_key = st.secrets.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
@@ -21,12 +21,12 @@ if not api_key:
     st.error("❌ Hittade ingen ANTHROPIC_API_KEY. Lägg till den i Streamlit Secrets eller .env-filen.")
     st.stop()
 
-# Skapa headers för workspace-id
+# Skapa headers för workspace-id om det finns
 custom_headers = {}
 if workspace_id:
     custom_headers["anthropic-workspace-id"] = workspace_id
 
-# Initalisera Anthropic-klienten
+# Initialisera Anthropic-klienten
 client = Anthropic(
     api_key=api_key,
     default_headers=custom_headers if custom_headers else None
@@ -80,7 +80,7 @@ def analyze_tender(tender):
     """
     
     response = client.messages.create(
-        model="claude-3-5-sonnet-20241022",
+        model="claude-3-sonnet-20240229",
         max_tokens=500,
         messages=[{"role": "user", "content": prompt}]
     )
