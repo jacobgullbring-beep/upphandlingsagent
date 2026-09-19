@@ -113,7 +113,7 @@ if st.button("🚀 Hämta och analysera upphandlingar"):
         )
 
         st.markdown("### 🤖 Claudes analys & filtrering")
-        st.markdown(response.content[0].text)
+        st.markdown(response.text)
 
         with st.expander("Visa rådata från alla hämtade sidor"):
           st.dataframe(df)
