@@ -17,7 +17,7 @@ if st.button("Kör testanrop mot Claude", type="primary"):
         try:
             client = anthropic.Anthropic(api_key=api_key)
             response = client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+                model="claude-3-5-sonnet-latest",
                 max_tokens=100,
                 messages=[{"role": "user", "content": "Svara med en kort hälsning och bekräfta att kopplingen fungerar!"}]
             )
