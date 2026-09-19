@@ -113,7 +113,9 @@ if st.button("🚀 Hämta och analysera upphandlingar"):
         )
 
         st.markdown("### 🤖 Claudes analys & filtrering")
-        st.markdown(response.text)
+        # Extrahera texten säkert från alla svarsblock
+answer_text = "".join([block.text for block in response.content if hasattr(block, "text")])
+st.markdown(answer_text)
 
         with st.expander("Visa rådata från alla hämtade sidor"):
           st.dataframe(df)
