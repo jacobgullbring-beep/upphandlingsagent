@@ -5,10 +5,10 @@ import os
 import json
 from datetime import datetime
 
-st.set_page_config(page_title="DAS Upphandlingsbevakning", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="GTM Upphandlingsbevakning", page_icon="🏛️", layout="wide")
 
-st.title("🏛️ DAS Säljbevakning – Kommuner & Regioner")
-st.write("Klistra in råtext från portalerna. Appen fokuserar på upphandlingar från kommuner och regioner (konsultstöd, management, digitalisering etc.) och rensar bort bygg.")
+st.title("🏛️ GTM Säljbevakning – Kommuner & Regioner")
+st.write("Klistra in all din råtext på en gång. Appen delar upp stora mängder automatiskt, rensar bort bygg och skapar en gemensam tabell.")
 
 # --- SIDOMENY MED SNABBLÄNKAR ---
 st.sidebar.header("🔗 Källor & Snabblänkar")
@@ -50,16 +50,16 @@ with tab_ovrig:
 
 st.markdown("---")
 
-if st.button("🚀 Generera tabell för Kommun & Region", type="primary", use_container_width=True):
+if st.button("🚀 Generera tabell för Kommun & Region (Alla sidor)", type="primary", use_container_width=True):
     
     combined_input = f"""
-    ### [KÄLLA: Kommers Annons (Notices) - https://www.kommersannons.se/Notices/TenderNotices]
+    ### [KÄLLA: Kommers Annons (Notices)]
     {text_c1 if text_c1.strip() else "Ej data."}
-    ### [KÄLLA: Kommers Annons (eLite) - https://www.kommersannons.se/eLite/Notice/NoticeList.aspx]
+    ### [KÄLLA: Kommers Annons (eLite)]
     {text_c2 if text_c2.strip() else "Ej data."}
-    ### [KÄLLA: e-Avrop - https://www.e-avrop.com/e-Upphandling/Default.aspx]
+    ### [KÄLLA: e-Avrop]
     {text_e if text_e.strip() else "Ej data."}
-    ### [KÄLLA: Mercell - https://app.mercell.com/search?filter=delivery_place_code%3ASE]
+    ### [KÄLLA: Mercell]
     {text_m if text_m.strip() else "Ej data."}
     ### [KÄLLA: Övrigt]
     {text_o if text_o.strip() else "Ej data."}
@@ -68,14 +68,24 @@ if st.button("🚀 Generera tabell för Kommun & Region", type="primary", use_co
     if not any([text_c1.strip(), text_c2.strip(), text_e.strip(), text_m.strip(), text_o.strip()]):
         st.warning("Du behöver klistra in text i minst en flik först!")
     else:
-        with st.spinner("Analyserar kommun- och regionaffärer, tolkar deadlines och bygger tabell..."):
-            
-            today_str = datetime.now().strftime("%Y-%m-%d")
+        # Dela upp texten i bitar om ca 12 000 tecken för att undvika att krascha AI:n
+        chunk_size = 12000
+        text_chunks = [combined_input[i:i+chunk_size] for i in range(0, len(combined_input), chunk_size)]
+        
+        all_parsed_data = []
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        for idx, chunk in enumerate(text_chunks):
+            status_text.text(f"Bearbetar del {idx+1} av {len(text_chunks)}...")
+            progress_bar.progress((idx + 1) / len(text_chunks))
             
             prompt = f"""
             Du är en expert på Business Development / GTM med fokus på den offentliga sektorn (kommuner och regioner) för konsultbolag. 
             Dagens datum är {today_str}. 
-            Analysera råtexten nedan från upphandlingsportaler.
+            Analysera råtexten nedan (detta är del {idx+1} av {len(text_chunks)}).
             
             VIKTIGA REGLER FÖR FILTRERING:
             1. **Prioritera Kommuner & Regioner:** Behåll i första hand upphandlingar där köparen är en kommun, kommunalt bolag, region eller kommunalförbund.
@@ -87,34 +97,29 @@ if st.button("🚀 Generera tabell för Kommun & Region", type="primary", use_co
             - Om det står "X days left" eller "Tomorrow", räkna ut det faktiska datumet baserat på att dagsdatum är {today_str} och skriv om det till formatet ÅÅÅÅ-MM-DD.
             - Om det helt saknas datum/deadline, sätt "Ej angivet".
             
-            Returnera resultatet ENDAST som en giltig JSON-lista med objekt för de relevanta upphandlingarna. Ingen inledande text, ingen markdown runt om. Varje objekt ska ha följande exakta nycklar (i denna ordning):
+            Returnera resultatet ENDAST som en giltig JSON-lista med objekt för de relevanta upphandlingarna i denna textdel. Ingen inledande text, ingen markdown runt om. Varje objekt ska ha följande exakta nycklar:
             - "Deadline": (Datum i formatet ÅÅÅÅ-MM-DD, eller "Ej angivet")
             - "Kategori": (T.ex. Management & Strategi, Digitalisering, HR & Utveckling, Analys & Utredning)
             - "Myndighet": (Organisation/Kommun/Region)
             - "Upphandling": (Titel på upphandlingen)
             - "Säljvinkel": (Kort säljrekommendation anpassad för kommun-/regionförsäljning)
-            - "Källa": (Vilken plattform det kom från, t.ex. e-Avrop, Mercell, Kommers Annons)
-            - "Käll-länk": (URL till respektive plattform som angavs i källhuvudet ovan)
+            - "Källa": (Vilken plattform det kom från)
+            - "Käll-länk": (URL till respektive plattform)
 
             Råtext att analysera:
-            {combined_input}
+            {chunk}
             """
-            
-            raw_output = ""
             
             try:
                 response = client.messages.create(
                     model="claude-sonnet-5",
-                    max_tokens=8000,
+                    max_tokens=4000,
                     messages=[{"role": "user", "content": prompt}]
                 )
                 
                 raw_output = "".join([block.text for block in response.content if hasattr(block, "text")])
                 
-                if not raw_output.strip():
-                    st.error("Modellen returnerade ett helt tomt svar. Detta kan bero på att inmatningstexten var för lång eller att säkerhetsfiltret stoppade anropet.")
-                else:
-                    # --- SÄKERHETSRENSNING & ÅTGÄRD AV KAPAD JSON ---
+                if raw_output.strip():
                     clean_json = raw_output.strip()
                     if "```json" in clean_json:
                         clean_json = clean_json.split("```json")[1]
@@ -127,26 +132,26 @@ if st.button("🚀 Generera tabell för Kommun & Region", type="primary", use_co
                     
                     if start_idx != -1 and end_idx != -1:
                         clean_json = clean_json[start_idx:end_idx+1]
-                    else:
-                        if start_idx != -1:
-                            clean_json = clean_json[start_idx:]
-                            last_brace = clean_json.rfind("}")
-                            if last_brace != -1:
-                                clean_json = clean_json[:last_brace+1] + "\n]"
-                    
-                    data = json.loads(clean_json)
-                    df = pd.DataFrame(data)
-                    
-                    if not df.empty:
-                        st.success(f"✅ Hittade {len(df)} relevanta kommun- och regionupphandlingar!")
-                        
-                        if "Deadline" in df.columns:
-                            df = df.sort_values(by="Deadline", ascending=True)
-                        
-                        st.markdown("### 📊 Interaktiv Sälj- och Deadline-tabell")
-                        st.dataframe(df, use_container_width=True, hide_index=True)
-                    else:
-                        st.warning("Hittade inga relevanta upphandlingar efter filtrering.")
-                    
+                        chunk_data = json.loads(clean_json)
+                        if isinstance(chunk_data, list):
+                            all_parsed_data.extend(chunk_data)
             except Exception as e:
-                st.error(f"Kunde inte tolka datat till tabell. Felmeddelande: {e}\n\nHär är det råa svaret från AI:\n\n{raw_output}")
+                continue
+        
+        status_text.empty()
+        progress_bar.empty()
+        
+        df = pd.DataFrame(all_parsed_data)
+        
+        if not df.empty:
+            # Ta bort eventuella dubbletter om samma upphandling kom med i skarven
+            df = df.drop_duplicates(subset=["Myndighet", "Upphandling"])
+            
+            if "Deadline" in df.columns:
+                df = df.sort_values(by="Deadline", ascending=True)
+                
+            st.success(f"✅ Klart! Hittade totalt {len(df)} unika relevanta kommun- och regionupphandlingar från alla dina sidor.")
+            st.markdown("### 📊 Interaktiv Sälj- och Deadline-tabell")
+            st.dataframe(df, use_container_width=True, hide_index=True)
+        else:
+            st.warning("Hittade inga relevanta upphandlingar efter filtrering av den inskickade texten.")
