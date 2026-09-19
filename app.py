@@ -102,14 +102,14 @@ if st.button("🚀 Generera tabell för Kommun & Region", type="primary", use_co
             
             try:
                 response = client.messages.create(
-                    model="claude-sonnet-5",
+                    model="claude-3-5-sonnet-20241022",
                     max_tokens=8000,
                     messages=[{"role": "user", "content": prompt}]
                 )
                 
                 raw_output = "".join([block.text for block in response.content if hasattr(block, "text")])
                 
-                # --- SÄKERHETSRENSNING AV JSON ---
+                # --- SÄKERHETSRENSNING & ÅTGÄRD AV KAPAD JSON ---
                 clean_json = raw_output.strip()
                 if "```json" in clean_json:
                     clean_json = clean_json.split("```json")[1]
@@ -122,6 +122,14 @@ if st.button("🚀 Generera tabell för Kommun & Region", type="primary", use_co
                 
                 if start_idx != -1 and end_idx != -1:
                     clean_json = clean_json[start_idx:end_idx+1]
+                else:
+                    # Om JSON-svaret blev avを切t (saknar avslutande ']')
+                    if start_idx != -1:
+                        clean_json = clean_json[start_idx:]
+                        # Hitta sista hela objektet (avslutas med '}')
+                        last_brace = clean_json.rfind("}")
+                        if last_brace != -1:
+                            clean_json = clean_json[:last_brace+1] + "\n]"
                 
                 data = json.loads(clean_json)
                 df = pd.DataFrame(data)
