@@ -81,7 +81,7 @@ if st.button("🚀 Hämta & Analysera Senaste Tilldelningarna", type="primary"):
             """
             
             response = client.messages.create(
-                model="claude-3-haiku-20240307",
+                model="claude-3-5-sonnet-latest",
                 max_tokens=600,
                 messages=[{"role": "user", "content": prompt}]
             )
