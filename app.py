@@ -20,8 +20,8 @@ if not api_key:
 
 genai.configure(api_key=api_key)
 
-# Använder den kostnadsfria standardmodellen för Gemini
-model = genai.GenerativeModel("gemini-2.5-flash")
+# Använder gemini-1.5-flash som är standard och fullt kompatibel med gratisnycklar
+model = genai.GenerativeModel("gemini-1.5-flash")
 
 # Filter i sidomenyn
 st.sidebar.header("🔍 Filter")
