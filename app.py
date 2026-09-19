@@ -5,9 +5,9 @@ import os
 import json
 from datetime import datetime
 
-st.set_page_config(page_title="GTM Upphandlingsbevakning", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="DAS Upphandlingsbevakning", page_icon="🏛️", layout="wide")
 
-st.title("🏛️ GTM Säljbevakning – Kommuner & Regioner")
+st.title("🏛️ DAS Säljbevakning – Kommuner & Regioner")
 st.write("Klistra in råtext från portalerna. Appen fokuserar på upphandlingar från kommuner och regioner (konsultstöd, management, digitalisering etc.) och rensar bort bygg.")
 
 # --- SIDOMENY MED SNABBLÄNKAR ---
@@ -100,7 +100,7 @@ if st.button("🚀 Generera tabell för Kommun & Region", type="primary", use_co
             {combined_input}
             """
             
-            raw_output = ""  # Förhindrar NameError om anropet misslyckas tidigt
+            raw_output = ""
             
             try:
                 response = client.messages.create(
@@ -111,39 +111,42 @@ if st.button("🚀 Generera tabell för Kommun & Region", type="primary", use_co
                 
                 raw_output = "".join([block.text for block in response.content if hasattr(block, "text")])
                 
-                # --- SÄKERHETSRENSNING & ÅTGÄRD AV KAPAD JSON ---
-                clean_json = raw_output.strip()
-                if "```json" in clean_json:
-                    clean_json = clean_json.split("```json")[1]
-                if "```" in clean_json:
-                    clean_json = clean_json.split("```")[0]
-                clean_json = clean_json.strip()
-                
-                start_idx = clean_json.find("[")
-                end_idx = clean_json.rfind("]")
-                
-                if start_idx != -1 and end_idx != -1:
-                    clean_json = clean_json[start_idx:end_idx+1]
+                if not raw_output.strip():
+                    st.error("Modellen returnerade ett helt tomt svar. Detta kan bero på att inmatningstexten var för lång eller att säkerhetsfiltret stoppade anropet.")
                 else:
-                    if start_idx != -1:
-                        clean_json = clean_json[start_idx:]
-                        last_brace = clean_json.rfind("}")
-                        if last_brace != -1:
-                            clean_json = clean_json[:last_brace+1] + "\n]"
-                
-                data = json.loads(clean_json)
-                df = pd.DataFrame(data)
-                
-                if not df.empty:
-                    st.success(f"✅ Hittade {len(df)} relevanta kommun- och regionupphandlingar!")
+                    # --- SÄKERHETSRENSNING & ÅTGÄRD AV KAPAD JSON ---
+                    clean_json = raw_output.strip()
+                    if "```json" in clean_json:
+                        clean_json = clean_json.split("```json")[1]
+                    if "```" in clean_json:
+                        clean_json = clean_json.split("```")[0]
+                    clean_json = clean_json.strip()
                     
-                    if "Deadline" in df.columns:
-                        df = df.sort_values(by="Deadline", ascending=True)
+                    start_idx = clean_json.find("[")
+                    end_idx = clean_json.rfind("]")
                     
-                    st.markdown("### 📊 Interaktiv Sälj- och Deadline-tabell")
-                    st.dataframe(df, use_container_width=True, hide_index=True)
-                else:
-                    st.warning("Hittade inga relevanta upphandlingar efter filtrering.")
+                    if start_idx != -1 and end_idx != -1:
+                        clean_json = clean_json[start_idx:end_idx+1]
+                    else:
+                        if start_idx != -1:
+                            clean_json = clean_json[start_idx:]
+                            last_brace = clean_json.rfind("}")
+                            if last_brace != -1:
+                                clean_json = clean_json[:last_brace+1] + "\n]"
+                    
+                    data = json.loads(clean_json)
+                    df = pd.DataFrame(data)
+                    
+                    if not df.empty:
+                        st.success(f"✅ Hittade {len(df)} relevanta kommun- och regionupphandlingar!")
+                        
+                        if "Deadline" in df.columns:
+                            df = df.sort_values(by="Deadline", ascending=True)
+                        
+                        st.markdown("### 📊 Interaktiv Sälj- och Deadline-tabell")
+                        st.dataframe(df, use_container_width=True, hide_index=True)
+                    else:
+                        st.warning("Hittade inga relevanta upphandlingar efter filtrering.")
                     
             except Exception as e:
                 st.error(f"Kunde inte tolka datat till tabell. Felmeddelande: {e}\n\nHär är det råa svaret från AI:\n\n{raw_output}")
