@@ -1,6 +1,6 @@
 streamlit
 pandas
-anthropic
+google-generativeai
 python-dotenv
 requests
 beautifulsoup4
