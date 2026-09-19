@@ -1,12 +1,11 @@
 import streamlit as st
-import pandas as pd
 import anthropic
 import os
 
 st.set_page_config(page_title="GTM Upphandlingsbevakning", page_icon="🛡️", layout="wide")
 
 st.title("🛡️ GTM Säljbevakning – Multi-portal")
-st.write("Klistra in råtexten från respektive upphandlingsportal i sina respektive rutor nedanför. Klicka sedan på knappen för att få en samlad, kategoriserad överblick!")
+st.write("Klistra in råtexten från respektive upphandlingsportal i sina respektive rutor nedanför.")
 
 api_key = st.secrets.get("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
 
@@ -48,7 +47,8 @@ with tab_ovrig:
 st.markdown("---")
 
 if st.button("🚀 Analysera och kategorisera alla källor", type="primary", use_container_width=True):
-    # Samla ihop allt som har fyllts i
+    
+    # Samla ihop allt
     combined_input = f"""
     ### [KÄLLA: KOMMERS ANNONS]
     {text_kommers if text_kommers.strip() else "Ingen data inmatad."}
@@ -69,7 +69,7 @@ if st.button("🚀 Analysera och kategorisera alla källor", type="primary", use
     if not any([text_kommers.strip(), text_eavrop.strip(), text_mercell.strip(), text_fmv.strip(), text_ovrig.strip()]):
         st.warning("Du behöver klistra in text i minst en av textrutorna först!")
     else:
-        with st.spinner("Claude sammanställer, rensar bort skräp och kategoriserar samtliga upphandlingar..."):
+        with st.spinner("Anropar Claude och bearbetar uppgifterna..."):
             prompt = f"""
             Du är en expert på Business Development / Go-To-Market (GTM) för konsultbolag inom offentlig sektor.
             
@@ -86,7 +86,7 @@ if st.button("🚀 Analysera och kategorisera alla källor", type="primary", use
                - 🏥 **Vård, Omsorg & Livsmedel**
                - 🏗️ **Infrastruktur, Miljö, Fastighet & Entreprenad**
                - 🏛️ **Övrigt / Allmän förvaltning**
-            3. För varje träff, ange vilken källa den kom från (t.ex. Kommers Annons, e-Avrop eller Mercell) och presentera den snyggt med:
+            3. För varje träff, ange vilken källa den kom från och presentera den snyggt med:
                - **Organisation / Myndighet:**
                - **Titel / Upphandling:**
                - **Källa:** 
@@ -101,10 +101,17 @@ if st.button("🚀 Analysera och kategorisera alla källor", type="primary", use
                     messages=[{"role": "user", "content": prompt}]
                 )
                 
-                answer_text = "".join([block.text for block in response.content if hasattr(block, "text")])
+                # Extrahera texten ordentligt
+                answer_text = ""
+                for block in response.content:
+                    if hasattr(block, "text"):
+                        answer_text += block.text
                 
-                st.markdown("### 📊 Samlad Kategoriserad Överblick")
-                st.markdown(answer_text)
+                if answer_text.strip():
+                    st.markdown("### 📊 Samlad Kategoriserad Överblick")
+                    st.markdown(answer_text)
+                else:
+                    st.error("Fick ett tomt svar från Claude. Kontrollera att modellnamnet och nyckeln fungerar.")
                 
             except Exception as e:
                 st.error(f"Ett fel uppstod vid anropet till Claude: {e}")
