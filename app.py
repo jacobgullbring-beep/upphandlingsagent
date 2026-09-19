@@ -4,10 +4,10 @@ import anthropic
 import os
 import json
 
-st.set_page_config(page_title="PA Consulting DAS Upphandlingsbevakning", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="GTM Upphandlingsbevakning", page_icon="🛡️", layout="wide")
 
-st.title("🛡️ PA Consulting DAS Säljbevakning")
-st.write("Använd snabblänkarna i sidomenyn för att hämta rådata, klistra in och generera tabellen.")
+st.title("🛡️ GTM Säljbevakning – Filtrerad för PA Consulting")
+st.write("Använd snabblänkarna i sidomenyn för att hämta rådata, klistra in och generera en renodlad tabell (bygg- och anläggningsprojekt filtreras bort automatiskt).")
 
 # --- SIDOMENY MED SNABBLÄNKAR ---
 st.sidebar.header("🔗 Källor & Snabblänkar")
@@ -49,7 +49,7 @@ with tab_ovrig:
 
 st.markdown("---")
 
-if st.button("🚀 Generera säljtabell med deadlines", type="primary", use_container_width=True):
+if st.button("🚀 Generera filtrerad säljtabell", type="primary", use_container_width=True):
     
     combined_input = f"""
     ### [KÄLLA: Kommers Annons (Notices) - https://www.kommersannons.se/Notices/TenderNotices]
@@ -67,19 +67,23 @@ if st.button("🚀 Generera säljtabell med deadlines", type="primary", use_cont
     if not any([text_c1.strip(), text_c2.strip(), text_e.strip(), text_m.strip(), text_o.strip()]):
         st.warning("Du behöver klistra in text i minst en flik först!")
     else:
-        with st.spinner("Analyserar data och bygger tabell..."):
+        with st.spinner("Analyserar data, filtrerar bort bygg/anläggning och bygger tabell..."):
             
             prompt = f"""
-            Du är en expert på Business Development / GTM för konsultbolag. Analysera råtexten nedan från upphandlingsportaler. Varje källrubrik innehåller en URL.
+            Du är en expert på Business Development / GTM för PA Consulting inom Defence & Security och management. Analysera råtexten nedan från upphandlingsportaler.
             
-            Returnera resultatet ENDAST som en giltig JSON-lista med objekt. Ingen inledande text, ingen markdown runt om. Varje objekt ska ha följande exakta nycklar:
+            VIKTIG REGLER FÖR FILtrERING:
+            - TA BORT ALLA upphandlingar som rör byggnation, anläggning, renovering av fastigheter, gatuarbeten, VVS, elinstallationer i byggnader eller traditionell entreprenad. Dessa är INTE relevanta för konsultbolag som fokuserar på försvar, säkerhet, ledning, IT och strategi.
+            - Behåll ENDAST upphandlingar som rör: Försvar & Säkerhet, IT & Digitalisering, Managementkonsulttjänster, Strategi, Utbildning, Rådgivning, Systemutveckling eller analys.
+            
+            Returnera resultatet ENDAST som en giltig JSON-lista med objekt för de relevanta upphandlingarna. Ingen inledande text, ingen markdown runt om. Varje objekt ska ha följande exakta nycklar:
             - "Deadline": (Datum i formatet ÅÅÅÅ-MM-DD om det finns, annars "Ej angivet")
-            - "Kategori": (T.ex. Försvar & Säkerhet, IT & Digitalisering, Vård & Omsorg, Infrastruktur, Övrigt)
+            - "Kategori": (T.ex. Försvar & Säkerhet, IT & Digitalisering, Management & Strategi)
             - "Myndighet": (Organisation/Köpare)
             - "Upphandling": (Titel på upphandlingen)
             - "Källa": (Vilken plattform det kom från, t.ex. e-Avrop, Mercell, Kommers Annons)
             - "Käll-länk": (URL till respektive plattform som angavs i källhuvudet ovan)
-            - "Säljvinkel": (Kort rekommendation för GTM-teamet)
+            - "Säljvinkel": (Kort rekommendation för PA Consulting-teamet)
 
             Råtext att analysera:
             {combined_input}
@@ -88,7 +92,7 @@ if st.button("🚀 Generera säljtabell med deadlines", type="primary", use_cont
             try:
                 response = client.messages.create(
                     model="claude-sonnet-5",
-                    max_tokens=8000, # Ökat till 8000 för att rymma mer text utan att klipper
+                    max_tokens=8000,
                     messages=[{"role": "user", "content": prompt}]
                 )
                 
@@ -103,9 +107,7 @@ if st.button("🚀 Generera säljtabell med deadlines", type="primary", use_cont
                     clean_json = clean_json[:-3]
                 clean_json = clean_json.strip()
                 
-                # Säkerhetsåtgärd om JSON-strängen kapas i slutet
                 if not clean_json.endswith("]") and clean_json.startswith("["):
-                    # Hitta sista kompletta objektet genom att leta efter sista avslutande klammern
                     last_brace = clean_json.rfind("}")
                     if last_brace != -1:
                         clean_json = clean_json[:last_brace+1] + "\n]"
@@ -114,7 +116,7 @@ if st.button("🚀 Generera säljtabell med deadlines", type="primary", use_cont
                 df = pd.DataFrame(data)
                 
                 if not df.empty:
-                    st.success(f"✅ Hittade {len(df)} upphandlingar!")
+                    st.success(f"✅ Hittade {len(df)} relevanta upphandlingar (bygg & anläggning har rensats bort)!")
                     
                     if "Deadline" in df.columns:
                         df = df.sort_values(by="Deadline", ascending=True)
@@ -122,7 +124,7 @@ if st.button("🚀 Generera säljtabell med deadlines", type="primary", use_cont
                     st.markdown("### 📊 Interaktiv Sälj- och Deadline-tabell")
                     st.dataframe(df, use_container_width=True, hide_index=True)
                 else:
-                    st.warning("Hittade inga strukturerade upphandlingar i texten.")
+                    st.warning("Hittade inga relevanta upphandlingar efter filtrering.")
                     
             except Exception as e:
                 st.error(f"Kunde inte tolka datat till tabell. Här är det råa svaret:\n\n{raw_output}")
