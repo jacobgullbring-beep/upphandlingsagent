@@ -96,7 +96,7 @@ if st.button("🚀 Analysera och kategorisera alla källor", type="primary", use
             
             try:
                 response = client.messages.create(
-                    model="claude-3-5-sonnet-latest",
+                    model="claude-sonnet-5",
                     max_tokens=4000,
                     messages=[{"role": "user", "content": prompt}]
                 )
