@@ -94,9 +94,10 @@ if st.button("🚀 Analysera och kategorisera alla källor", type="primary", use
             """
             
             try:
+                # Höjt max_tokens till 8000 för att undvika att svaret klipps av
                 response = client.messages.create(
                     model="claude-sonnet-5",
-                    max_tokens=4000,
+                    max_tokens=8000,
                     messages=[{"role": "user", "content": prompt}]
                 )
                 
@@ -105,10 +106,8 @@ if st.button("🚀 Analysera och kategorisera alla källor", type="primary", use
                 if answer_text.strip():
                     st.success("✅ Analysen är klar!")
                     st.markdown("### 📊 Samlad Kategoriserad Överblick")
-                    
-                    # Använd en container för att säkerställa att innehållet laddas korrekt
                     with st.container():
-                        st.write(answer_text)
+                        st.markdown(answer_text)
                 else:
                     st.error("Fick ett tomt svar från Claude.")
                 
