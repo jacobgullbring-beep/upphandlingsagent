@@ -7,8 +7,8 @@ from datetime import datetime
 
 st.set_page_config(page_title="GTM Upphandlingsbevakning", page_icon="🏛️", layout="wide")
 
-st.title("🏛️ GTM Säljbevakning – Kommuner & Regioner")
-st.write("Klistra in all din råtext på en gång. Appen delar upp stora mängder automatiskt, rensar bort bygg och skapar en gemensam tabell.")
+st.title("🏛️ GTM Säljbevakning & Sammanfattningar")
+st.write("Samlar in alla upphandlingar och presenterar dem med en tydlig sammanfattning och säljvinkel.")
 
 # --- SIDOMENY MED SNABBLÄNKAR ---
 st.sidebar.header("🔗 Källor & Snabblänkar")
@@ -50,7 +50,7 @@ with tab_ovrig:
 
 st.markdown("---")
 
-if st.button("🚀 Generera tabell för Kommun & Region (Alla sidor)", type="primary", use_container_width=True):
+if st.button("🚀 Analysera & Sammanfatta alla uppdrag", type="primary", use_container_width=True):
     
     combined_input = f"""
     ### [KÄLLA: Kommers Annons (Notices)]
@@ -68,7 +68,6 @@ if st.button("🚀 Generera tabell för Kommun & Region (Alla sidor)", type="pri
     if not any([text_c1.strip(), text_c2.strip(), text_e.strip(), text_m.strip(), text_o.strip()]):
         st.warning("Du behöver klistra in text i minst en flik först!")
     else:
-        # Dela upp texten i bitar om ca 12 000 tecken för att undvika att krascha AI:n
         chunk_size = 12000
         text_chunks = [combined_input[i:i+chunk_size] for i in range(0, len(combined_input), chunk_size)]
         
@@ -83,28 +82,18 @@ if st.button("🚀 Generera tabell för Kommun & Region (Alla sidor)", type="pri
             progress_bar.progress((idx + 1) / len(text_chunks))
             
             prompt = f"""
-            Du är en expert på Business Development / GTM med fokus på den offentliga sektorn (kommuner och regioner) för konsultbolag. 
+            Du är en expert på Business Development / GTM för konsultbolag inom offentlig sektor. 
             Dagens datum är {today_str}. 
-            Analysera råtexten nedan (detta är del {idx+1} av {len(text_chunks)}).
+            Analysera råtexten nedan (del {idx+1} av {len(text_chunks)}). 
             
-            VIKTIGA REGLER FÖR FILTRERING:
-            1. **Prioritera Kommuner & Regioner:** Behåll i första hand upphandlingar där köparen är en kommun, kommunalt bolag, region eller kommunalförbund.
-            2. **Rensa bort bygg & anläggning:** TA BORT ALLA upphandlingar som rör byggnation, entreprenad, gatuarbeten, renoveringar, fastighetsskötsel, VVS eller elinstallationer i byggnader.
-            3. **Inriktning för konsulttjänster:** Fokusera på ramavtal och upphandlingar som rör managementkonsulttjänster, organisationsutveckling, digitaliseringsstöd, HR-stöd, utredningar, analys, utbildning eller allmänna konsulttjänster riktade till kommun/region.
+            Extrahera ALLA upphandlingar eller tilldelningsmeddelanden som finns i texten utan att begränsa antalet.
             
-            REGLER FÖR DEADLINE:
-            - Leta efter texter som "Deadline", "X days left", "Tomorrow", eller rena datum (t.ex. ÅÅÅÅ-MM-DD eller DD/MM).
-            - Om det står "X days left" eller "Tomorrow", räkna ut det faktiska datumet baserat på att dagsdatum är {today_str} och skriv om det till formatet ÅÅÅÅ-MM-DD.
-            - Om det helt saknas datum/deadline, sätt "Ej angivet".
-            
-            Returnera resultatet ENDAST som en giltig JSON-lista med objekt för de relevanta upphandlingarna i denna textdel. Ingen inledande text, ingen markdown runt om. Varje objekt ska ha följande exakta nycklar:
+            Returnera resultatet ENDAST som en giltig JSON-lista med objekt. Inga markdown-backticks kring JSON-svaret (returnera rå JSON som börjar med [ och slutar med ]). Varje objekt ska ha exakt dessa nycklar:
             - "Deadline": (Datum i formatet ÅÅÅÅ-MM-DD, eller "Ej angivet")
-            - "Kategori": (T.ex. Management & Strategi, Digitalisering, HR & Utveckling, Analys & Utredning)
-            - "Myndighet": (Organisation/Kommun/Region)
-            - "Upphandling": (Titel på upphandlingen)
-            - "Säljvinkel": (Kort säljrekommendation anpassad för kommun-/regionförsäljning)
-            - "Källa": (Vilken plattform det kom från)
-            - "Käll-länk": (URL till respektive plattform)
+            - "Myndighet": (Organisation/Köpare)
+            - "Upphandling": (Titel på upphandlingen eller tilldelningen)
+            - "Sammanfattning": (En kort, kärnfull sammanfattning på 1-2 meningar om vad uppdraget avser)
+            - "Saljvinkel": (Kort säljrekommendation / vinkel för konsultteamet)
 
             Råtext att analysera:
             {chunk}
@@ -141,17 +130,25 @@ if st.button("🚀 Generera tabell för Kommun & Region (Alla sidor)", type="pri
         status_text.empty()
         progress_bar.empty()
         
-        df = pd.DataFrame(all_parsed_data)
-        
-        if not df.empty:
-            # Ta bort eventuella dubbletter om samma upphandling kom med i skarven
-            df = df.drop_duplicates(subset=["Myndighet", "Upphandling"])
+        if all_parsed_data:
+            st.success(f"✅ Hittade totalt {len(all_parsed_data)} uppdrag!")
             
-            if "Deadline" in df.columns:
-                df = df.sort_values(by="Deadline", ascending=True)
-                
-            st.success(f"✅ Klart! Hittade totalt {len(df)} unika relevanta kommun- och regionupphandlingar från alla dina sidor.")
-            st.markdown("### 📊 Interaktiv Sälj- och Deadline-tabell")
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            # Konvertera till DataFrame för snygg tabellvisning med sammanfattningskolumn efter Myndighet
+            df_results = pd.DataFrame(all_parsed_data)
+            
+            # Säkerställ att kolumnerna ligger i rätt ordning om de finns
+            desired_columns = ["Deadline", "Myndighet", "Sammanfattning", "Upphandling", "Saljvinkel"]
+            existing_cols = [col for col in desired_columns if col in df_results.columns]
+            df_results = df_results[existing_cols]
+            
+            st.dataframe(df_results, use_container_width=True, hide_index=True)
+            
+            # Alternativt en detaljerad vy nedanför om man vill läsa mer
+            st.markdown("### 📌 Detaljerad vy per uppdrag")
+            for item in all_parsed_data:
+                with st.expander(f"{item.get('Myndighet', 'Okänd')} – {item.get('Upphandling', 'Ingen titel')}"):
+                    st.write(f"**Deadline:** {item.get('Deadline', 'Ej angivet')}")
+                    st.write(f"**Sammanfattning:** {item.get('Sammanfattning', 'Ingen sammanfattning')}")
+                    st.write(f"**GTM-vinkel:** {item.get('Saljvinkel', 'Ingen vinkel angiven')}")
         else:
-            st.warning("Hittade inga relevanta upphandlingar efter filtrering av den inskickade texten.")
+            st.warning("Kunde inte hitta några uppdrag att extrahera från den inlistade texten.")
