@@ -4,10 +4,10 @@ import anthropic
 import os
 import json
 
-st.set_page_config(page_title="GTM Upphandlingsbevakning", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="PA DAS Upphandlingsbevakning", page_icon="🛡️", layout="wide")
 
-st.title("🛡️ GTM Säljbevakning – Filtrerad för PA Consulting")
-st.write("Använd snabblänkarna i sidomenyn för att hämta rådata, klistra in och generera en renodlad tabell (bygg- och anläggningsprojekt filtreras bort automatiskt).")
+st.title("🛡️ PA DAS Upphandlingsbevakning")
+st.write("Använd snabblänkarna i sidomenyn för att hämta rådata, klistra in och generera tabellen med säljvinkeln tidigt.")
 
 # --- SIDOMENY MED SNABBLÄNKAR ---
 st.sidebar.header("🔗 Källor & Snabblänkar")
@@ -73,17 +73,17 @@ if st.button("🚀 Generera filtrerad säljtabell", type="primary", use_containe
             Du är en expert på Business Development / GTM för PA Consulting inom Defence & Security och management. Analysera råtexten nedan från upphandlingsportaler.
             
             VIKTIG REGLER FÖR FILtrERING:
-            - TA BORT ALLA upphandlingar som rör byggnation, anläggning, renovering av fastigheter, gatuarbeten, VVS, elinstallationer i byggnader eller traditionell entreprenad. Dessa är INTE relevanta för konsultbolag som fokuserar på försvar, säkerhet, ledning, IT och strategi.
+            - TA BORT ALLA upphandlingar som rör byggnation, anläggning, renovering av fastigheter, gatuarbeten, VVS, elinstallationer i byggnader eller traditionell entreprenad.
             - Behåll ENDAST upphandlingar som rör: Försvar & Säkerhet, IT & Digitalisering, Managementkonsulttjänster, Strategi, Utbildning, Rådgivning, Systemutveckling eller analys.
             
-            Returnera resultatet ENDAST som en giltig JSON-lista med objekt för de relevanta upphandlingarna. Ingen inledande text, ingen markdown runt om. Varje objekt ska ha följande exakta nycklar:
+            Returnera resultatet ENDAST som en giltig JSON-lista med objekt för de relevanta upphandlingarna. Ingen inledande text, ingen markdown runt om. Varje objekt ska ha följande exakta nycklar (i denna ordning):
             - "Deadline": (Datum i formatet ÅÅÅÅ-MM-DD om det finns, annars "Ej angivet")
             - "Kategori": (T.ex. Försvar & Säkerhet, IT & Digitalisering, Management & Strategi)
             - "Myndighet": (Organisation/Köpare)
             - "Upphandling": (Titel på upphandlingen)
+            - "Säljvinkel": (Kort rekommendation för PA Consulting-teamet)
             - "Källa": (Vilken plattform det kom från, t.ex. e-Avrop, Mercell, Kommers Annons)
             - "Käll-länk": (URL till respektive plattform som angavs i källhuvudet ovan)
-            - "Säljvinkel": (Kort rekommendation för PA Consulting-teamet)
 
             Råtext att analysera:
             {combined_input}
@@ -116,7 +116,7 @@ if st.button("🚀 Generera filtrerad säljtabell", type="primary", use_containe
                 df = pd.DataFrame(data)
                 
                 if not df.empty:
-                    st.success(f"✅ Hittade {len(df)} relevanta upphandlingar (bygg & anläggning har rensats bort)!")
+                    st.success(f"✅ Hittade {len(df)} relevanta upphandlingar!")
                     
                     if "Deadline" in df.columns:
                         df = df.sort_values(by="Deadline", ascending=True)
