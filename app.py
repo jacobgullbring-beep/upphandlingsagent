@@ -38,8 +38,7 @@ def scrape_eavrop(start_url):
             soup = BeautifulSoup(response.text, 'html.parser')
             
             # OBS: CSS-klasserna här behöver anpassas efter hur e-Avrops tabell/listor ser ut i HTML
-            # Detta är en generell struktur för att plocka raderna
-            rows = soup.find_all('tr') # Justera baserat på e-Avrops tabellstruktur
+            rows = soup.find_all('tr')
             
             for row in rows:
                 cols = row.find_all('td')
@@ -52,19 +51,17 @@ def scrape_eavrop(start_url):
                     })
             
             # Leta efter "Nästa sida"-länk om den finns
-            next_page_element = soup.find('a', text='Nästa') # Justera efter e-Avrops pagineringsknapp
+            next_page_element = soup.find('a', text='Nästa')
             if next_page_element and next_page_element.has_attr('href'):
-                # Bygg på om det är relativ länk
                 current_url = next_page_element['href']
                 page_count += 1
             else:
                 break
         except Exception as e:
-            st.warning(fKunde inte läsa sida {page_count}: {e}``)
+            st.warning(f"Kunde inte läsa sida {page_count}: {e}")
             break
             
-    # Om webbskrapningen inte hittade strukturen direkt (pga e-Avrops skydd eller dynamiska element), 
-    # returnerar vi exempeldata så appen inte kraschar och du kan testa sökfunktionen:
+    # Om webbskrapningen inte hittade strukturen direkt returnerar vi exempeldata
     if not all_tenders:
         return pd.DataFrame([
             {"Sida": 1, "Titel/Detalj": "IT-konsulttjänster Migreringsstöd", "Organisation": "FMV", "Sista anbudsdag": "2026-10-01"},
@@ -91,13 +88,12 @@ if 'tender_df' in st.session_state:
     df_to_show = st.session_state['tender_df']
     
     if search_query:
-        # Filtrera rader som matchar söksträngen i någon kolumn
         mask = df_to_show.astype(str).apply(lambda x: x.str.contains(search_query, case=False, na=False)).any(axis=1)
         df_to_show = df_to_show[mask]
         
     st.dataframe(df_to_show, use_container_width=True)
     
-    # Möjlighet att låta Claude analysera det filtrerade urvalet
+    # Möjlighet att låta Claude analysera det filtrerade urvalet med Sonnet 5
     if st.button("🤖 Kör Sonnet 5-analys på det filtrerade urvalet"):
         with st.spinner("Analyserar med Sonnet 5..."):
             data_summary = df_to_show.to_string()
