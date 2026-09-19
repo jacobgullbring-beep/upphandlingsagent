@@ -5,9 +5,9 @@ import os
 import json
 from datetime import datetime
 
-st.set_page_config(page_title="GTM Upphandlingsbevakning", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="DAS Upphandlingsbevakning", page_icon="🏛️", layout="wide")
 
-st.title("🏛️ GTM Säljbevakning – Kommuner & Regioner")
+st.title("🏛️ DAS Säljbevakning – Kommuner & Regioner")
 st.write("Klistra in råtext från portalerna. Appen fokuserar på upphandlingar från kommuner och regioner (konsultstöd, management, digitalisering etc.) och rensar bort bygg.")
 
 # --- SIDOMENY MED SNABBLÄNKAR ---
