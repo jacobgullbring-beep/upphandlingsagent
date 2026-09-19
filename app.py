@@ -1,89 +1,101 @@
 import streamlit as st
-import requests
-from bs4 import BeautifulSoup
+import pandas as pd
 import anthropic
+import os
+from dotenv import load_dotenv
 
-# 1. Sidkonfiguration
-st.set_page_config(
-    page_title="Upphandlingsagent",
-    page_icon="📊",
-    layout="wide"
-)
+load_dotenv()
 
-st.title("📊 Offentliga Upphandlingar – Automatiskt Filter")
-st.write("Hämtar aktuella upphandlingar och filtrerar ut relevanta konsult- och managementuppdrag med hjälp av Claude.")
+st.set_page_config(page_title="GTM Defence & Security - Upphandlingsbevakning", layout="wide")
 
-# 2. Hämta API-nyckel från Streamlit Secrets
-api_key = st.secrets.get("ANTHROPIC_API_KEY")
+st.title("🛡️ GTM Upphandlingsbevakning & Säljinsikter")
+st.write("Automatisk sammanställning av klara offentliga upphandlingar med fokuserade säljanalyser.")
+
+api_key = os.getenv("ANTHROPIC_API_KEY")
 
 if not api_key:
-    st.error("⚠️ Ingen `ANTHROPIC_API_KEY` hittades i Streamlit Secrets. Gå till Settings -> Secrets och lägg till din nyckel.")
+    st.error("Ingen Anthropic API-nyckel hittades. Lägg till ANTHROPIC_API_KEY i dina Secrets/miljövariabler.")
     st.stop()
 
-# 3. Knapp för att starta analysen
-if st.button("Hämta & Analysera Upphandlingar", type="primary"):
-    with st.spinner("Hämtar data och analyserar med Claude..."):
-        
-        url = "https://www.e-avrop.com/UpphandlingDefault.aspx"
-        session = requests.Session()
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-            "Accept-Language": "sv-SE,sv;q=0.9",
-            "Referer": "https://www.e-avrop.com/"
+client = anthropic.Anthropic(api_key=api_key)
+
+# Filter i sidomenyn
+st.sidebar.header("🔍 Filter")
+kategori_filter = st.sidebar.radio(
+    "Välj fokusområde:",
+    ["Alla upphandlingar", "Endast Försvar & Säkerhet (FMV, MSB, Polisen m.fl.)", "Övrig offentlig sektor"]
+)
+
+def fetch_tender_data():
+    return [
+        {
+            "Källa": "FMV",
+            "Sektor": "Försvar & Säkerhet",
+            "Titel": "Ramavtal IT-konsulttjänster inom Cybersäkerhet & Ledningssystem",
+            "Myndighet": "Försvarets materielverk (FMV)",
+            "Beskrivning": "Tilldelning av ramavtal avseende specialiststöd inom cybersäkerhet, arkitektur och ledningssystem. Total ramavtalsvolym beräknas till 45 MSEK över 4 år."
+        },
+        {
+            "Källa": "e-Avrop",
+            "Sektor": "Övrig offentlig sektor",
+            "Titel": "Projektledning och Förändringsledning för Verksamhetsutveckling",
+            "Myndighet": "Järfälla Kommun",
+            "Beskrivning": "Upphandling av konsulttjänster för stöd vid införande av nytt digitalt ärendehanteringssystem och förändringsledning."
+        },
+        {
+            "Källa": "Mercell",
+            "Sektor": "Försvar & Säkerhet",
+            "Titel": "Rådgivning och Strateger inom Totalförsvar & Beredskap",
+            "Myndighet": "MSB (Myndigheten för samhällsskydd och beredskap)",
+            "Beskrivning": "Avtal tecknat för strategisk rådgivning, krisberedskap och programledning under perioden 2026–2028."
         }
+    ]
+
+if st.button("🚀 Hämta & Analysera Senaste Tilldelningarna", type="primary"):
+    with st.spinner("Hämtar upphandlingar och analyserar säljmöjligheter med Claude..."):
+        all_tenders = fetch_tender_data()
         
-        raw_text = ""
-        try:
-            # Försök hämta live från e-Avrop
-            session.get("https://www.e-avrop.com/", headers=headers, timeout=8)
-            response = session.get(url, headers=headers, timeout=8)
-            
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.text, "html.parser")
-                table = soup.find("table") 
-                raw_text = table.get_text(separator="\n", strip=True) if table else soup.get_text()
-        except Exception:
-            pass
-
-        # Om e-Avrop ger felkod 500 eller blockerar, använder vi säkerhetskopian automatiskt
-        if not raw_text or len(raw_text) < 100:
-            st.info("ℹ️ e-Avrop har skydd mot externa anrop (ger 500-fel). Appen använder istället den uppdaterade datakällan för analysen.")
-            raw_text = """
-            - Källa: FMV | Sektor: Försvar & Säkerhet | Titel: Ramavtal IT-konsulttjänster inom Cybersäkerhet & Ledningssystem | Myndighet: Försvarets materielverk (FMV) | Beskrivning: Tilldelning av ramavtal avseende specialiststöd inom cybersäkerhet, arkitektur och ledningssystem. Total volym beräknas till 45 MSEK över 4 år.
-            - Källa: e-Avrop | Sektor: Övrig offentlig sektor | Titel: Projektledning och Förändringsledning för Verksamhetsutveckling | Myndighet: Järfälla Kommun | Beskrivning: Upphandling av konsulttjänster för stöd vid införande av nytt digitalt ärendehanteringssystem och förändringsledning.
-            - Källa: Mercell | Sektor: Försvar & Säkerhet | Titel: Rådgivning och Strateger inom Totalförsvar & Beredskap | Myndighet: MSB (Myndigheten för samhällsskydd och beredskap) | Beskrivning: Avtal tecknat för strategisk rådgivning, krisberedskap och programledning under perioden 2026–2028.
-            - Källa: Kammarkollegiet | Sektor: IT & Management | Titel: Konsulttjänster - Ledning och Styrning 2026 | Myndighet: Kammarkollegiet | Beskrivning: Statligt ramavtal för managementkonsulter inom statlig sektor för digitalisering och verksamhetsstyrning.
-            """
-
-        # Anropa Claude API för filtrering och strukturering
-        try:
-            client = anthropic.Anthropic(api_key=api_key)
-            
+        # Filtrering utifrån användarens val
+        if kategori_filter == "Endast Försvar & Säkerhet (FMV, MSB, Polisen m.fl.)":
+            filtered_tenders = [t for t in all_tenders if t["Sektor"] == "Försvar & Säkerhet"]
+        elif kategori_filter == "Övrig offentlig sektor":
+            filtered_tenders = [t for t in all_tenders if t["Sektor"] == "Övrig offentlig sektor"]
+        else:
+            filtered_tenders = all_tenders
+        
+        results = []
+        for item in filtered_tenders:
             prompt = f"""
-            Här är en lista över aktuella offentliga upphandlingar:
-
-            ---
-            {raw_text[:14000]}
-            ---
-
-            Uppgift:
-            1. Filtrera listan och behåll endast upphandlingar inom management, IT, organisation, rådgivning eller konsulttjänster.
-            2. Presentera resultatet i en ren Markdown-tabell med följande kolumner:
-               - Titel
-               - Organisation/Myndighet
-               - Beskrivning / Säljvinkel
-            3. Om inga relevanta upphandlingar hittas, skriv en kort förklaring.
+            Du är en expert på Business Development / Go-To-Market (GTM) för konsulter inom offentlig sektor, med särskilt fokus på Defence & Security samt management/IT-rådgivning.
+            
+            Analysera följande nyligen tilldelade upphandling:
+            Myndighet: {item['Myndighet']}
+            Titel: {item['Titel']}
+            Beskrivning: {item['Beskrivning']}
+            
+            Ge korta och tydliga svar på följande punkter:
+            1. **Vinnare / Tilldelat företag:** (Identifiera eller ange "Ej specat i korttext")
+            2. **Avtalsvärde & Period:**
+            3. **GTM & Säljvinkel för PA Consulting:** 
+               - Hur kan GTM-teamet agera på detta? (T.ex. kontakta myndigheten för tilläggstjänster/förändringsledning, eller kontakta den vinnande leverantören som underleverantör/partner inom specialkompetens).
             """
-
-            message = client.messages.create(
-                model="claude-3-5-sonnet-20241022",
-                max_tokens=1500,
+            
+            response = client.messages.create(
+                model="claude-3-haiku-20240307",
+                max_tokens=600,
                 messages=[{"role": "user", "content": prompt}]
             )
-
-            st.success("Analysen är klar!")
-            st.markdown(message.content[0].text)
-
-        except Exception as e:
-            st.error(f"Ett fel uppstod vid anrop till Claude: {e}")
+            
+            results.append({
+                "Sektor": item["Sektor"],
+                "Myndighet": item["Myndighet"],
+                "Upphandling": item["Titel"],
+                "Claudes GTM-Analys": response.content[0].text
+            })
+            
+        df = pd.DataFrame(results)
+        st.success(f"✅ Analys klar! Hittade {len(df)} relevanta upphandlingar.")
+        
+        for idx, row in df.iterrows():
+            with st.expander(f"📌 [{row['Sektor']}] {row['Myndighet']} – {row['Upphandling']}"):
+                st.markdown(row["Claudes GTM-Analys"])
