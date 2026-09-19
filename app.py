@@ -21,7 +21,7 @@ api_key = st.secrets.get("ANTHROPIC_API_KEY") or st.sidebar.text_input(
 
 # Inställning för antal sidor att skrapa
 num_pages = st.sidebar.slider(
-    "Antal sidor att hämta från e-Avrop", min_w=1, max_value=5, value=2
+    "Antal sidor att hämta från e-Avrop", min_value=1, max_value=5, value=2
 )
 
 
