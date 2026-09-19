@@ -6,12 +6,11 @@ import json
 
 st.set_page_config(page_title="GTM Upphandlingsbevakning", page_icon="🛡️", layout="wide")
 
-st.title("🛡️ GTM Säljbevakning – Med direktlänkar")
-st.write("Använd snabblänkarna nedan för att hämta rådata från respektive portal, klistra in och generera tabellen.")
+st.title("🛡️ GTM Säljbevakning – Stabil Tabellgenerering")
+st.write("Använd snabblänkarna i sidomenyn för att hämta rådata, klistra in och generera tabellen.")
 
 # --- SIDOMENY MED SNABBLÄNKAR ---
 st.sidebar.header("🔗 Källor & Snabblänkar")
-st.sidebar.markdown("Klicka för att öppna portalen i ett nytt fönster:")
 st.sidebar.markdown("- [e-Avrop](https://www.e-avrop.com/e-Upphandling/Default.aspx)")
 st.sidebar.markdown("- [Kommers Annons (Notices)](https://www.kommersannons.se/Notices/TenderNotices)")
 st.sidebar.markdown("- [Kommers Annons (eLite)](https://www.kommersannons.se/eLite/Notice/NoticeList.aspx)")
@@ -25,7 +24,6 @@ if not api_key:
 
 client = anthropic.Anthropic(api_key=api_key)
 
-# Flikar för portalerna
 tab_kommers_1, tab_kommers_2, tab_eavrop, tab_mercell, tab_ovrig = st.tabs([
     "Kommers Annons (Notices)", 
     "Kommers Annons (eLite)", 
@@ -69,7 +67,7 @@ if st.button("🚀 Generera säljtabell med deadlines", type="primary", use_cont
     if not any([text_c1.strip(), text_c2.strip(), text_e.strip(), text_m.strip(), text_o.strip()]):
         st.warning("Du behöver klistra in text i minst en flik först!")
     else:
-        with st.spinner("Analyserar datum, deadlines och bygger tabell..."):
+        with st.spinner("Analyserar data och bygger tabell..."):
             
             prompt = f"""
             Du är en expert på Business Development / GTM för konsultbolag. Analysera råtexten nedan från upphandlingsportaler. Varje källrubrik innehåller en URL.
@@ -90,7 +88,7 @@ if st.button("🚀 Generera säljtabell med deadlines", type="primary", use_cont
             try:
                 response = client.messages.create(
                     model="claude-sonnet-5",
-                    max_tokens=4000,
+                    max_tokens=8000, # Ökat till 8000 för att rymma mer text utan att klipper
                     messages=[{"role": "user", "content": prompt}]
                 )
                 
@@ -105,6 +103,13 @@ if st.button("🚀 Generera säljtabell med deadlines", type="primary", use_cont
                     clean_json = clean_json[:-3]
                 clean_json = clean_json.strip()
                 
+                # Säkerhetsåtgärd om JSON-strängen kapas i slutet
+                if not clean_json.endswith("]") and clean_json.startswith("["):
+                    # Hitta sista kompletta objektet genom att leta efter sista avslutande klammern
+                    last_brace = clean_json.rfind("}")
+                    if last_brace != -1:
+                        clean_json = clean_json[:last_brace+1] + "\n]"
+                
                 data = json.loads(clean_json)
                 df = pd.DataFrame(data)
                 
@@ -115,8 +120,6 @@ if st.button("🚀 Generera säljtabell med deadlines", type="primary", use_cont
                         df = df.sort_values(by="Deadline", ascending=True)
                     
                     st.markdown("### 📊 Interaktiv Sälj- och Deadline-tabell")
-                    st.write("Sorterad efter närmaste deadline. Klicka på länkarna i tabellen eller sidomenyn för att komma direkt till källan.")
-                    
                     st.dataframe(df, use_container_width=True, hide_index=True)
                 else:
                     st.warning("Hittade inga strukturerade upphandlingar i texten.")
