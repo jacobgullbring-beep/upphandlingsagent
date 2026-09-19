@@ -9,28 +9,41 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("💼 Upphandlingsbevakning (Flera RSS-flöden)")
-st.write("Samlad vy för alla dina bevakningsflöden från Mercell, e-Avrop och andra portaler.")
+st.title("💼 Upphandlingsbevakning med Smarta Filter")
+st.write("Samlad vy över alla dina RSS-flöden med filtrering på myndighetstyp och upphandlingsstatus.")
 
-# 2. Sidomeny för hantering av RSS-länkar
+# 2. Sidomeny för RSS-länkar och Filter
 st.sidebar.header("📡 RSS-Källor")
-st.sidebar.write("Lägg in en RSS-länk per rad:")
+st.sidebar.write("Lägg in RSS-länkar (en per rad):")
 
-# Standardlänkar (Ersätt/komplettera med din kollegas riktiga RSS-länkar)
 default_urls = """https://www.kommersannons.se/rss/rss.aspx
 https://ted.europa.eu/api/v2/rss/searches?q=defence"""
 
 urls_input = st.sidebar.text_area(
     "RSS-Länkar:",
     value=default_urls,
-    height=150
+    height=120
 )
 
 st.sidebar.divider()
-st.sidebar.header("🔍 Sök & Filter")
-search_term = st.sidebar.text_input("Sök i rubrik eller beskrivning:", "")
+st.sidebar.header("🔍 Smarta Filter")
 
-# 3. Funktion för att hämta och slå ihop flera RSS-flöden
+# Fritextsökning
+search_term = st.sidebar.text_input("Sök nyckelord:", "")
+
+# Filter för Myndighetstyp
+org_filter = st.sidebar.selectbox(
+    "Filtrera på Myndighetstyp:",
+    ["Alla myndigheter", "Kommuner", "Regioner", "Statliga myndigheter & Försvar"]
+)
+
+# Filter för Upphandlingsstatus
+status_filter = st.sidebar.selectbox(
+    "Filtrera på Status:",
+    ["Alla upphandlingar", "Endast Klara / Tilldelade avtal", "Pågående upphandlingar"]
+)
+
+# 3. Funktion för att hämta RSS-data
 @st.cache_data(ttl=600)
 def fetch_all_rss(urls_list):
     all_items = []
@@ -55,29 +68,46 @@ def fetch_all_rss(urls_list):
                     "Länk": entry.link,
                     "Beskrivning": summary
                 })
-        except Exception as e:
-            st.sidebar.warning(f"Kunde inte läsa: {url[:30]}...")
+        except Exception:
+            pass
             
     return pd.DataFrame(all_items)
 
-# 4. Bearbeta och visa datan
+# 4. Bearbeta och filtrera datan
 urls = [u for u in urls_input.split("\n") if u.strip()]
 
 if urls:
     df = fetch_all_rss(urls)
     
     if not df.empty:
-        # Filtrera baserat på sökord
+        # Skapa söksområde i gemensam textkolumn
+        full_text = df["Titel"].fillna("") + " " + df["Beskrivning"].fillna("")
+        
+        # 1. Fritextfilter
         if search_term:
-            df = df[
-                df["Titel"].str.contains(search_term, case=False, na=False) |
-                df["Beskrivning"].str.contains(search_term, case=False, na=False) |
-                df["Källa/Flöde"].str.contains(search_term, case=False, na=False)
-            ]
+            df = df[full_text.str.contains(search_term, case=False, na=False)]
+            full_text = df["Titel"].fillna("") + " " + df["Beskrivning"].fillna("")
+
+        # 2. Myndighetsfilter
+        if org_filter == "Kommuner":
+            df = df[full_text.str.contains("kommun", case=False, na=False)]
+        elif org_filter == "Regioner":
+            df = df[full_text.str.contains("region|landsting", case=False, na=False)]
+        elif org_filter == "Statliga myndigheter & Försvar":
+            df = df[full_text.str.contains("myndighet|verk|fmv|msb|försvarsmakten|polisen|styrelse", case=False, na=False)]
+
+        # 3. Statusfilter
+        full_text_status = df["Titel"].fillna("") + " " + df["Beskrivning"].fillna("")
+        award_keywords = "tilldelning|tilldelat|vinnare|kontrakt|avtal tecknat|avslutad|tilldelningsbeslut"
         
-        st.metric("Totalt antal upphandlingar i alla flöden", len(df))
+        if status_filter == "Endast Klara / Tilldelade avtal":
+            df = df[full_text_status.str.contains(award_keywords, case=False, na=False)]
+        elif status_filter == "Pågående upphandlingar":
+            df = df[~full_text_status.str.contains(award_keywords, case=False, na=False)]
+
+        st.metric("Antal matchande upphandlingar", len(df))
         
-        # Översiktstabell
+        # Tabellvy
         st.dataframe(
             df[["Källa/Flöde", "Publicerad", "Titel", "Länk"]],
             column_config={
@@ -96,6 +126,6 @@ if urls:
                 st.write(f"**Beskrivning:** {row['Beskrivning']}")
                 st.markdown(f"🔗 [Läs hela upphandlingen]({row['Länk']})")
     else:
-        st.info("Inga upphandlingar hittades i de angivna RSS-flödena. Klistra in kollegans giltiga RSS-länkar i rutan till vänster.")
+        st.info("Inga upphandlingar hittades i de angivna RSS-flödena.")
 else:
-    st.warning("Lägg till minst en RSS-länk i textrutan till vänster.")
+    st.warning("Lägg till minst en RSS-länk i rutan till vänster.")
