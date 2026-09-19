@@ -83,8 +83,8 @@ if st.button("🚀 Hämta & Analysera Senaste Tilldelningarna", type="primary"):
             
             # Anropa det nya gränssnittet för generering
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=prompt,
+            model="gemini-1.5-flash",
+            contents=prompt,
             )
             
             results.append({
