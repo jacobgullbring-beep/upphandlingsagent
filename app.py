@@ -5,9 +5,9 @@ import os
 import json
 from datetime import datetime
 
-st.set_page_config(page_title="DAS Upphandlingsbevakning", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="GTM Upphandlingsbevakning", page_icon="🏛️", layout="wide")
 
-st.title("🏛️ DAS Säljbevakning – Kommuner & Regioner")
+st.title("🏛️ GTM Säljbevakning – Kommuner & Regioner")
 st.write("Klistra in råtext från portalerna. Appen fokuserar på upphandlingar från kommuner och regioner (konsultstöd, management, digitalisering etc.) och rensar bort bygg.")
 
 # --- SIDOMENY MED SNABBLÄNKAR ---
@@ -100,9 +100,11 @@ if st.button("🚀 Generera tabell för Kommun & Region", type="primary", use_co
             {combined_input}
             """
             
+            raw_output = ""  # Förhindrar NameError om anropet misslyckas tidigt
+            
             try:
                 response = client.messages.create(
-                    model="claude-3-5-sonnet-20241022",
+                    model="claude-sonnet-5",
                     max_tokens=8000,
                     messages=[{"role": "user", "content": prompt}]
                 )
@@ -123,10 +125,8 @@ if st.button("🚀 Generera tabell för Kommun & Region", type="primary", use_co
                 if start_idx != -1 and end_idx != -1:
                     clean_json = clean_json[start_idx:end_idx+1]
                 else:
-                    # Om JSON-svaret blev avを切t (saknar avslutande ']')
                     if start_idx != -1:
                         clean_json = clean_json[start_idx:]
-                        # Hitta sista hela objektet (avslutas med '}')
                         last_brace = clean_json.rfind("}")
                         if last_brace != -1:
                             clean_json = clean_json[:last_brace+1] + "\n]"
