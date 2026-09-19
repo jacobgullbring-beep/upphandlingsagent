@@ -34,9 +34,19 @@ def scrape_recent_tenders():
                 cols = row.find_all('td')
                 if len(cols) >= 5:
                     cols_text = [col.text.strip() for col in cols]
-                    if cols_text[0] and "Logga in" not in cols_text[0] and "Bevaka" not in cols_text[0] and not cols_text[0].isdigit():
+                    title = cols_text[0]
+                    
+                    # Rensa bort skräp, inloggningslänkar och rena sidnummer/paginering
+                    if title and "Logga in" not in title and "Bevaka" not in title:
+                        # Hoppa över rader där titeln bara är ett nummer (sidnummer)
+                        if title.isdigit():
+                            continue
+                        # Hoppa över rader som uppenbarligen är pagineringsknappar
+                        if len(cols_text) > 1 and all(c.isdigit() for c in cols_text if c):
+                            continue
+                            
                         tenders.append({
-                            "Titel": cols_text[0],
+                            "Titel": title,
                             "Publicerad": cols_text[1],
                             "Organisation": cols_text[2],
                             "Kontext / CPV": cols_text[3],
@@ -52,7 +62,7 @@ def scrape_recent_tenders():
                 soup = BeautifulSoup(response.text, 'html.parser')
                 all_tenders.extend(extract_rows(soup))
 
-            # Hämta sidor 2 till 10 för det dagsaktuella flödet
+            # Hämta sidor 2 till 10
             for page in range(2, 11):
                 page_url = f"{TARGET_URL}?page={page}"
                 res = session.get(page_url, headers=headers, timeout=10)
@@ -65,7 +75,13 @@ def scrape_recent_tenders():
         except Exception as e:
             st.warning(f"Ett fel uppstod vid skrapning: {e}")
 
-    return pd.DataFrame(all_tenders).drop_duplicates()
+    df = pd.DataFrame(all_tenders).drop_duplicates()
+    
+    # Extra säkerhetsåtgärd: Droppa rader där titeln är tom eller enbart siffror
+    if not df.empty:
+        df = df[~df['Titel'].astype(str).str.match(r'^\d+$')]
+        
+    return df
 
 if st.button("🚀 Hämta de senaste upphandlingarna (Sida 1–10)", type="primary"):
     df_result = scrape_recent_tenders()
@@ -89,11 +105,9 @@ if 'tender_df' in st.session_state and not st.session_state['tender_df'].empty:
         
     st.info(f"Visar {len(df_to_show)} upphandlingar")
     
-    # Dölj "Kontext / CPV"-kolumnen i själva tabellen genom att visa utvalda kolumner
     columns_to_display = ["Titel", "Publicerad", "Organisation", "Deadline"]
     st.dataframe(df_to_show[columns_to_display], use_container_width=True)
 
-    # Dold/expandering för kontext om man vill kika närmare
     with st.expander("📂 Visa råkontext & CPV-koder för träffarna"):
         for idx, row in df_to_show.iterrows():
             st.markdown(f"**{row['Organisation']} – {row['Titel']}**")
@@ -103,7 +117,6 @@ if 'tender_df' in st.session_state and not st.session_state['tender_df'].empty:
     if st.button("💡 Kör GTM-analys på filtrerade upphandlingar"):
         with st.spinner("Genererar säljinsikter med Claude..."):
             analysis_results = []
-            # Analyserar upp till de 10 översta i den filtrerade listan
             subset = df_to_show.head(10)
             for idx, row in subset.iterrows():
                 prompt = f"""
