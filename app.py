@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import requests
 import streamlit as st
+import json
 
 st.set_page_config(
     page_title="GTM Upphandlingsbevakning", page_icon="🛡️", layout="wide"
@@ -90,7 +91,7 @@ if st.button("🚀 Hämta och analysera upphandlingar"):
         st.success(f"Hittade totalt {len(df)} upphandlingar!")
 
         # Konvertera dataframe till text för att skicka till Claude
-        data_text = df.to_json(orient="records", ensure_ascii=False)
+        data_text = json.dumps(df.to_dict(orient="records"), ensure_ascii=False)
 
         # Anropa Claude
         client = anthropic.Anthropic(api_key=api_key)
