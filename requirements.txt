@@ -3,3 +3,4 @@ pandas
 feedparser
 anthropic
 requests
+beautifulsoup4
