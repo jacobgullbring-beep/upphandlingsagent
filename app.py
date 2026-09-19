@@ -88,7 +88,17 @@ if 'tender_df' in st.session_state and not st.session_state['tender_df'].empty:
         df_to_show = df_to_show[mask]
         
     st.info(f"Visar {len(df_to_show)} upphandlingar")
-    st.dataframe(df_to_show, use_container_width=True)
+    
+    # Dölj "Kontext / CPV"-kolumnen i själva tabellen genom att visa utvalda kolumner
+    columns_to_display = ["Titel", "Publicerad", "Organisation", "Deadline"]
+    st.dataframe(df_to_show[columns_to_display], use_container_width=True)
+
+    # Dold/expandering för kontext om man vill kika närmare
+    with st.expander("📂 Visa råkontext & CPV-koder för träffarna"):
+        for idx, row in df_to_show.iterrows():
+            st.markdown(f"**{row['Organisation']} – {row['Titel']}**")
+            st.caption(f"Kontext / CPV: {row['Kontext / CPV']}")
+            st.markdown("---")
 
     if st.button("💡 Kör GTM-analys på filtrerade upphandlingar"):
         with st.spinner("Genererar säljinsikter med Claude..."):
