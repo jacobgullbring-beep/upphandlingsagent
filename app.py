@@ -159,12 +159,12 @@ if st.button("🚀 Analysera & Filtrera (Inkl. Civilt Försvar & Kommuner)", typ
 if 'parsed_tenders' in st.session_state and st.session_state['parsed_tenders']:
     st.markdown("---")
     st.subheader("📊 Välj relevanta uppdrag")
-    st.write("Bocka i de uppdrag du vill ta med i exporten:")
+    st.write("Bocka i de uppdrag du vill titta närmare på och ta med i exporten:")
 
     rows_for_ui = []
     for idx, item in enumerate(st.session_state['parsed_tenders']):
         rows_for_ui.append({
-            "Välj": False, # <-- Ändrat till False så de är avbockade som standard
+            "Välj": False,
             "Myndighet": item.get("Myndighet", ""),
             "Upphandling": item.get("Upphandling", ""),
             "Deadline": item.get("Deadline", ""),
@@ -189,14 +189,17 @@ if 'parsed_tenders' in st.session_state and st.session_state['parsed_tenders']:
     
     st.markdown("---")
     
-    if selected_indices:
-        with st.expander("🔍 Visa detaljerade sammanfattningar & säljvinklar för de valda uppdragen"):
+    # Visar alltid expandern, men anpassar texten beroende på om något är ikryssat eller ej
+    with st.expander("🔍 Detaljerade sammanfattningar & säljvinklar för valda uppdrag", expanded=True):
+        if selected_indices:
             for idx in selected_indices:
                 item = st.session_state['parsed_tenders'][idx]
                 st.markdown(f"**📌 {item.get('Myndighet', '')} – {item.get('Upphandling', '')}**")
                 st.markdown(f"*Sammanfattning:* {item.get('Sammanfattning', '')}")
                 st.markdown(f"*Säljvinkel:* {item.get('Saljvinkel', '')}")
                 st.divider()
+        else:
+            st.info("💡 Bocka i ett eller flera uppdrag i tabellen ovan för att läsa sammanfattning och säljvinkel här.")
 
     rows_for_excel = []
     for idx in selected_indices:
@@ -233,4 +236,4 @@ if 'parsed_tenders' in st.session_state and st.session_state['parsed_tenders']:
             type="primary"
         )
     else:
-        st.info("💡 Bocka i minst ett uppdrag i tabellen ovan för att visa dess sammanfattning och aktivera nerladdning av Master-Excel.")
+        st.warning("Du behöver bocka i minst ett uppdrag i tabellen för att kunna ladda ner Excel-filen.")
