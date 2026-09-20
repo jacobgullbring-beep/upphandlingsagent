@@ -21,7 +21,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.title("🛡️ GTM Säljbevakning – Defence & Security")
+st.title("🛡️ DAS Säljbevakning – Defence & Security")
 st.write("Filtret är ställt på Försvar, Säkerhet, Totalförsvar och Civilt försvar (inkl. relevanta kommun/region-uppdrag).")
 
 # --- SIDOMENY MED SNABBLÄNKAR ---
@@ -133,81 +133,4 @@ if st.button("🚀 Analysera & Filtrera (Inkl. Civilt Försvar & Kommuner)", typ
                     if "```json" in clean_json:
                         clean_json = clean_json.split("```json")[1]
                     if "```" in clean_json:
-                        clean_json = clean_json.split("```")[0]
-                    clean_json = clean_json.strip()
-                    
-                    start_idx = clean_json.find("[")
-                    end_idx = clean_json.rfind("]")
-                    
-                    if start_idx != -1 and end_idx != -1:
-                        clean_json = clean_json[start_idx:end_idx+1]
-                        chunk_data = json.loads(clean_json)
-                        if isinstance(chunk_data, list):
-                            all_parsed_data.extend(chunk_data)
-            except Exception as e:
-                continue
-        
-        status_text.empty()
-        progress_bar.empty()
-        
-        if all_parsed_data:
-            st.success(f"✅ Hittade {len(all_parsed_data)} relevanta uppdrag inom Defence, Säkerhet & Civilt försvar!")
-            
-            rows_for_excel = []
-            rows_for_ui = []
-            
-            for item in all_parsed_data:
-                rows_for_excel.append({
-                    "Myndighet": item.get("Myndighet", ""),
-                    "Upphandling": item.get("Upphandling", ""),
-                    "Sammanfattning": item.get("Sammanfattning", ""),
-                    "Säljvinkel": item.get("Saljvinkel", ""),
-                    "Go/No-go": "",
-                    "Ansvarig konsult för anbudet": "",
-                    "Medverkande konsulter": "",
-                    "Deadline": item.get("Deadline", ""),
-                    "Deadline internt": "",
-                    "Deadline inlämning": "",
-                    "Omfattning (i timmar/pengar)": item.get("Omfattning", ""),
-                    "Status (Arbete pågår, inlämnad, avbruten)": "Arbete pågår",
-                    "Utfall": "",
-                    "Källa": item.get("Källa", "")
-                })
-                
-                rows_for_ui.append({
-                    "Myndighet": item.get("Myndighet", ""),
-                    "Upphandling": item.get("Upphandling", ""),
-                    "Deadline": item.get("Deadline", ""),
-                    "Omfattning": item.get("Omfattning", ""),
-                    "Källa": item.get("Källa", "")
-                })
-            
-            df_ui = pd.DataFrame(rows_for_ui)
-            df_master = pd.DataFrame(rows_for_excel)
-            
-            st.subheader("📊 Filtrerad Översikt (Defence, Säkerhet & Civilt Försvar)")
-            st.dataframe(df_ui, use_container_width=True, hide_index=True)
-            
-            st.markdown("---")
-            
-            with st.expander("🔍 Visa detaljerade sammanfattningar & säljvinklar per uppdrag"):
-                for item in all_parsed_data:
-                    st.markdown(f"**📌 {item.get('Myndighet', '')} – {item.get('Upphandling', '')}**")
-                    st.markdown(f"*Sammanfattning:* {item.get('Sammanfattning', '')}")
-                    st.markdown(f"*Säljvinkel:* {item.get('Saljvinkel', '')}")
-                    st.divider()
-
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df_master.to_excel(writer, index=False, sheet_name='Upphandlingar')
-            excel_data = output.getvalue()
-            
-            st.download_button(
-                label="📥 Ladda ner Master-Excel",
-                data=excel_data,
-                file_name=f"GTM_Defence_CiviltForsvar_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="primary"
-            )
-        else:
-            st.warning("Hittade inga upphandlingar som matchade kriterierna i den inklistrade texten.")
+                        clean_json = clean_json.split("
