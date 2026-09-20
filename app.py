@@ -22,7 +22,7 @@ st.markdown(
 )
 
 st.title("🏛️ DAS Upphandlingsbevakning")
-st.write("Analyserar inklistrade källor och genererar en strukturerad Excel-fil med komplett kolumnstruktur.")
+st.write("Analyserar era klistrade källor och kan generera en strukturerad tabell samt Excel-fil.")
 
 # --- SIDOMENY MED SNABBLÄNKAR ---
 st.sidebar.header("🔗 Källor & Snabblänkar")
@@ -173,6 +173,13 @@ if st.button("🚀 Analysera & Generera Master-Excel", type="primary", use_conta
             
             df_master = pd.DataFrame(rows_for_df)
             
+            # --- VISA TABELL DIREKT I APPEN ---
+            st.subheader("📊 Samlad Översiktstabell")
+            st.dataframe(df_master, use_container_width=True, hide_index=True)
+            
+            st.markdown("---")
+            
+            # Skapa Excel-fil i minnet för nedladdning
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df_master.to_excel(writer, index=False, sheet_name='Upphandlingar')
@@ -185,18 +192,5 @@ if st.button("🚀 Analysera & Generera Master-Excel", type="primary", use_conta
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 type="primary"
             )
-            
-            st.markdown("---")
-            st.subheader("📋 Förhandsgranskning av träffar")
-            
-            for item in all_parsed_data:
-                deadline_str = item.get("Deadline", "Ej angivet")
-                myndighet = item.get("Myndighet", "Okänd myndighet")
-                titel = item.get("Upphandling", "Ingen titel")
-                
-                with st.expander(f"📌 [{deadline_str}] {myndighet} – {titel}"):
-                    st.markdown(f"**📝 Sammanfattning:**\n{item.get('Sammanfattning', '')}")
-                    st.markdown(f"**💡 GTM / Säljvinkel:**\n{item.get('Saljvinkel', '')}")
-                    st.caption(f"Källa: {item.get('Källa', 'Okänd')} | Omfattning: {item.get('Omfattning', 'Ej angivet')}")
         else:
             st.warning("Hittade inga relevanta upphandlingar efter filtrering.")
