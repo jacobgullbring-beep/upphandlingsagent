@@ -4,6 +4,7 @@ import anthropic
 import os
 import json
 from datetime import datetime
+from io import BytesIO
 
 st.set_page_config(page_title="DAS Upphandlingsbevakning", page_icon="🏛️", layout="wide")
 
@@ -114,7 +115,8 @@ if st.button("🚀 Generera skärpt tabell", type="primary", use_container_width
                     messages=[{"role": "user", "content": prompt}]
                 )
                 
-                raw_output = response.text
+                # Säkert sätt att plocka ut texten från Anthropic-svaret
+                raw_output = "".join([block.text for block in response.content if hasattr(block, "text")])
                 
                 clean_json = raw_output.strip()
                 if "```json" in clean_json:
@@ -133,7 +135,6 @@ if st.button("🚀 Generera skärpt tabell", type="primary", use_container_width
                 df = pd.DataFrame(data)
                 
                 if not df.empty:
-                    # Spara i session_state så att kryssrutor och export fungerar stabilt
                     st.session_state["df_results"] = df
                     st.success(f"✅ Hittade {len(df)} relevanta uppdrag!")
                 else:
@@ -164,10 +165,8 @@ if "df_results" in st.session_state and not st.session_state["df_results"].empty
     selected_rows = edited_df[edited_df["Välj"] == True].drop(columns=["Välj"])
     
     if not selected_rows.empty:
-        # Skapa Excel-fil i minnet för nedladdning
         file_name = f"Utvalda_Upphandlingar_{datetime.now().strftime('%Y-%m-%d')}.xlsx"
         
-        from io import BytesIO
         output = BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             selected_rows.to_excel(writer, index=False, sheet_name='Utvalda Uppdrag')
