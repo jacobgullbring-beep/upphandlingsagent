@@ -4,10 +4,10 @@ import anthropic
 import os
 import json
 
-st.set_page_config(page_title="GTM Upphandlingsbevakning", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="DAS Upphandlingsbevakning", page_icon="🛡️", layout="wide")
 
-st.title("🛡️ GTM Säljbevakning (Konsultfokuserad)")
-st.write("Extraherar enbart relevanta upphandlingar inom konsulttjänster, IT, strategi och styrning.")
+st.title("🛡️ DAS Upphandlingsbevakning)
+st.write("Extraherar och visar enbart rena konsult-, rådgivnings- och digitaliseringsaffärer.")
 
 # --- SIDOMENY MED SNABBLÄNKAR ---
 st.sidebar.header("🔗 Källor & Snabblänkar")
@@ -49,7 +49,7 @@ with tab_ovrig:
 
 st.markdown("---")
 
-if st.button("🚀 Extrahera relevanta konsultuppdrag", type="primary", use_container_width=True):
+if st.button("🚀 Extrahera och rensa bort allt ointressant", type="primary", use_container_width=True):
     
     combined_parts = []
     if text_c1.strip(): combined_parts.append(f"--- KOMMERS NOTICES ---\n{text_c1}")
@@ -67,23 +67,22 @@ if st.button("🚀 Extrahera relevanta konsultuppdrag", type="primary", use_cont
         
         progress_bar = st.progress(0)
         status_text = st.empty()
-        status_text.text("Filtrerar bort skräp och letar relevanta konsultaffärer...")
+        status_text.text("Filtrerar bort allt skräp och tar bort icke-relevanta uppdrag...")
         progress_bar.progress(50)
         
-        # HÄR ÄR DEN SKÄRPADE PROMPTEN
         prompt = f"""
-        Du är en affärsutvecklare och säljare för ett större management- och konsultbolag (som verkar inom bl.a. management, strategi, IT-digitalisering, verksamhetsutveckling, förändringsledning samt försvar och säkerhet).
+        Du är en affärsutvecklare för ett management- och konsultbolag. 
+        Läs igenom texten nedan och utför följande strikta filtrering:
         
-        Läs igenom texten nedan och utför följande:
-        1. STRRIKT FILTRERING: Exkludera allt som handlar om byggentreprenader, fastighetsskötsel, fysiska varuinköp (t.ex. larm, utrustning, maskiner), livsmedel, drift av idrottsanläggningar/isrinkar, städ eller andra fysiska/operativa entreprenader där konsultbolag inte kan lämna anbud.
-        2. INKLUDERA ENDAST: Upphandlingar som avser konsulttjänster, rådgivning, IT-utveckling, systemstöd, projektledning, programledarskap, juridisk/ekonomisk rådgivning, analys, cybersäkerhet eller strategiskt stöd till kommuner, regioner, myndigheter eller statliga bolag.
+        1. TA BORT HELT: Allt som rör byggentreprenader, fastighetsskötsel, fysiska varor, larm, utrustning, livsmedel, isrinkar/idrottsanläggningar, städ eller andra fysiska entreprenader. Dessa ska INTE finnas med i listan överhuvudtaget.
+        2. BEHÅLL ENDAST: Klara uppdrag inom konsulttjänster, rådgivning, IT, systemutveckling, projektledning, programledarskap, förändringsledning, säkerhetsanalys eller strategiskt stöd.
         
-        Svara ENDAST med en giltig JSON-lista utan markdown-backticks (ska börja med [ och sluta med ]). Om inga relevanta uppdrag hittas, returnera en tom lista ([]).
+        Svara ENDAST med en giltig JSON-lista utan markdown-backticks (ska börja med [ och sluta med ]). Om inga relevanta uppdrag hittas, returnera en helt tom lista ([]).
         Varje objekt i listan måste ha exakt dessa nycklar:
         - "Deadline": Datum (eller "Ej angivet")
         - "Myndighet": Köpare / organisation
         - "Upphandling": Titel på upphandlingen
-        - "Relevans/Affärsmöjlighet": Varför detta är intressant för ett konsultbolag.
+        - "Relevans/Affärsmöjlighet": Varför detta är intressant för konsultbolaget.
 
         Text att analysera:
         {combined_input}
@@ -120,8 +119,8 @@ if st.button("🚀 Extrahera relevanta konsultuppdrag", type="primary", use_cont
         progress_bar.empty()
         
         if all_parsed_data and isinstance(all_parsed_data, list):
-            st.success(f"✅ Hittade {len(all_parsed_data)} relevanta konsultuppdrag!")
+            st.success(f"✅ Rensningen klar! Visar {len(all_parsed_data)} relevanta uppdrag.")
             df_results = pd.DataFrame(all_parsed_data)
             st.dataframe(df_results, use_container_width=True, hide_index=True)
         else:
-            st.warning("Hittade inga uppdrag som matchade kriterierna för konsulttjänster i den inklistrade texten.")
+            st.warning("Inga uppdrag klarade filtret. Allt icke-relevant har rensats bort.")
