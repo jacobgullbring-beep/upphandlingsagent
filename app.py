@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 import io
 
-st.set_page_config(page_title="DAS Upphandlingsbevakning", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="DAS Upphandlingsbevakning - Defence & Security", page_icon="🛡️", layout="wide")
 
 # --- ANPASSAD CSS FÖR SMALARE SIDEBAR ---
 st.markdown(
@@ -21,8 +21,8 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.title("🏛️ DAS Upphandlingsbevakning")
-st.write("Analyserar källor och genererar en överskådlig tabell samt komplett Excel-fil.")
+st.title("🛡️ GTM Säljbevakning – Defence & Security")
+st.write("Filtret är ställt på Försvar, Säkerhet, Totalförsvar och Civilt försvar (inkl. relevanta kommun/region-uppdrag).")
 
 # --- SIDOMENY MED SNABBLÄNKAR ---
 st.sidebar.header("🔗 Källor & Snabblänkar")
@@ -54,7 +54,7 @@ with tab_kommers_2:
     text_c2 = st.text_area("Klistra in från Kommers Annons (eLite):", height=150, key="c2")
 
 with tab_eavrop:
-    text_e = st.text_area("Klistra in från e-Avrop:", height=150, key="e")
+    text_e = st.text_area("Klistra in från e-Avrop:", height=150, key="c2_e")
 
 with tab_mercell:
     text_m = st.text_area("Klistra in från Mercell:", height=150, key="m")
@@ -64,7 +64,7 @@ with tab_ovrig:
 
 st.markdown("---")
 
-if st.button("🚀 Analysera & Generera Master-Excel", type="primary", use_container_width=True):
+if st.button("🚀 Analysera & Filtrera (Inkl. Civilt Försvar & Kommuner)", type="primary", use_container_width=True):
     
     combined_input = f"""
     ### [KÄLLA: Kommers Annons (Notices)]
@@ -96,22 +96,23 @@ if st.button("🚀 Analysera & Generera Master-Excel", type="primary", use_conta
             progress_bar.progress((idx + 1) / len(text_chunks))
             
             prompt = f"""
-            Du är en expert på Business Development / GTM med fokus på offentlig sektor (kommuner och regioner) för konsultbolag. 
+            Du är en expert på Business Development och GTM inom Defence & Security (försvar, säkerhet, totalförsvar, civilt försvar och krisberedskap) för ett ledande konsultbolag. 
             Dagens datum är {today_str}. 
             Analysera råtexten nedan (del {idx+1} av {len(text_chunks)}).
             
             REGLER FÖR FILTRERING:
-            1. **Prioritera Kommuner & Regioner:** Behåll upphandlingar där köparen är kommun, kommunalt bolag, region eller liknande.
-            2. **Rensa bort bygg & anläggning:** TA BORT allt som rör fysiskt byggande, gatuarbeten, renoveringar eller fastighetsskötsel.
-            3. **Fokus:** Management, organisation, digitalisering, strategi, HR, utredningar och allmänna konsulttjänster.
+            1. **INKLUDERA:** 
+               - Upphandlingar från försvarssektorn (FMV, Försvarsmakten, MSB, Säpo etc.).
+               - Upphandlingar från **kommuner och regioner** som har en direkt koppling till **civilt försvar, totalförsvar, krisberedskap, säkerhetsskydd, informationssäkerhet, robusthet eller skyddsobjekt**.
+            2. **RENSA BORT:** Allmänna, rent civila kommunala upphandlingar som inte berör säkerhet eller beredskap (t.ex. standard HR-stöd för vanliga förvaltningar, skolutbildning, socialtjänst, vanliga IT-system för administration eller lokal fastighetsskötsel/bygg).
             
             Returnera resultatet ENDAST som en giltig JSON-lista med relevanta objekt. Inga markdown-backticks kring JSON-svaret (returnera rå JSON som börjar med [ och slutar med ]). Varje objekt ska ha exakt dessa nycklar:
-            - "Myndighet": (Organisation/Kommun/Region)
+            - "Myndighet": (Organisation/Köpare)
             - "Upphandling": (Titel på upphandlingen)
             - "Deadline": (Sista svarsdag om det framgår, annars "Ej angivet")
             - "Omfattning": (Uppskattad omfattning i timmar eller belopp om det nämns, annars "Ej angivet")
-            - "Sammanfattning": (En fyllig sammanfattning på 2-3 meningar om vad upphandlingen avser)
-            - "Saljvinkel": (Konkret rekommendation på hur ett konsultteam bör positionera sig)
+            - "Sammanfattning": (En fyllig sammanfattning på 2-3 meningar om vad upphandlingen avser med fokus på säkerhet/försvar/beredskap)
+            - "Saljvinkel": (Konkret rekommendation på hur PA Consulting inom Defence & Security bör positionera sig)
             - "Källa": (Vilken plattform det kom från)
 
             Råtext att analysera:
@@ -150,13 +151,12 @@ if st.button("🚀 Analysera & Generera Master-Excel", type="primary", use_conta
         progress_bar.empty()
         
         if all_parsed_data:
-            st.success(f"✅ Hittade {len(all_parsed_data)} relevanta uppdrag!")
+            st.success(f"✅ Hittade {len(all_parsed_data)} relevanta uppdrag inom Defence, Säkerhet & Civilt försvar!")
             
             rows_for_excel = []
             rows_for_ui = []
             
             for item in all_parsed_data:
-                # Fullständig data för Excel
                 rows_for_excel.append({
                     "Myndighet": item.get("Myndighet", ""),
                     "Upphandling": item.get("Upphandling", ""),
@@ -174,7 +174,6 @@ if st.button("🚀 Analysera & Generera Master-Excel", type="primary", use_conta
                     "Källa": item.get("Källa", "")
                 })
                 
-                # Renare och kortare tabell för själva gränssnittet (utan långa brödtexter)
                 rows_for_ui.append({
                     "Myndighet": item.get("Myndighet", ""),
                     "Upphandling": item.get("Upphandling", ""),
@@ -186,13 +185,11 @@ if st.button("🚀 Analysera & Generera Master-Excel", type="primary", use_conta
             df_ui = pd.DataFrame(rows_for_ui)
             df_master = pd.DataFrame(rows_for_excel)
             
-            # --- KOMPAKT ÖVERSIKTSTABELL I APPEN ---
-            st.subheader("📊 Översiktstabell")
+            st.subheader("📊 Filtrerad Översikt (Defence, Säkerhet & Civilt Försvar)")
             st.dataframe(df_ui, use_container_width=True, hide_index=True)
             
             st.markdown("---")
             
-            # --- EXPANDERS FÖR ATT LÄSA SAMMANFATTNING UTAN ATT SKROLLA TABELL ---
             with st.expander("🔍 Visa detaljerade sammanfattningar & säljvinklar per uppdrag"):
                 for item in all_parsed_data:
                     st.markdown(f"**📌 {item.get('Myndighet', '')} – {item.get('Upphandling', '')}**")
@@ -200,18 +197,17 @@ if st.button("🚀 Analysera & Generera Master-Excel", type="primary", use_conta
                     st.markdown(f"*Säljvinkel:* {item.get('Saljvinkel', '')}")
                     st.divider()
 
-            # Skapa Excel-fil i minnet för nedladdning med alla kolumner
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df_master.to_excel(writer, index=False, sheet_name='Upphandlingar')
             excel_data = output.getvalue()
             
             st.download_button(
-                label="📥 Ladda ner Master-Excel (med alla kolumner & full text)",
+                label="📥 Ladda ner Master-Excel",
                 data=excel_data,
-                file_name=f"GTM_Upphandlingar_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+                file_name=f"GTM_Defence_CiviltForsvar_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 type="primary"
             )
         else:
-            st.warning("Hittade inga relevanta upphandlingar efter filtrering.")
+            st.warning("Hittade inga upphandlingar som matchade kriterierna i den inklistrade texten.")
