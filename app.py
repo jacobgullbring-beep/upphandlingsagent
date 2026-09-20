@@ -5,10 +5,10 @@ import os
 import json
 from datetime import datetime
 
-st.set_page_config(page_title="GTM Upphandlingsbevakning", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="DAS Upphandlingsbevakning", page_icon="⚡", layout="wide")
 
-st.title("🏛️ GTM Säljbevakning & Sammanfattningar")
-st.write("Samlar in alla upphandlingar och presenterar dem med en tydlig sammanfattning och säljvinkel.")
+st.title("⚡ DAS Säljbevakning")
+st.write("Extraherar upphandlingar snabbt och kostnadseffektivt.")
 
 # --- SIDOMENY MED SNABBLÄNKAR ---
 st.sidebar.header("🔗 Källor & Snabblänkar")
@@ -50,29 +50,23 @@ with tab_ovrig:
 
 st.markdown("---")
 
-if st.button("🚀 Analysera & Sammanfatta alla uppdrag", type="primary", use_container_width=True):
+if st.button("🚀 Extrahera med Haiku 4.5", type="primary", use_container_width=True):
     
     combined_input = f"""
-    ### [KÄLLA: Kommers Annons (Notices)]
-    {text_c1 if text_c1.strip() else "Ej data."}
-    ### [KÄLLA: Kommers Annons (eLite)]
-    {text_c2 if text_c2.strip() else "Ej data."}
-    ### [KÄLLA: e-Avrop]
-    {text_e if text_e.strip() else "Ej data."}
-    ### [KÄLLA: Mercell]
-    {text_m if text_m.strip() else "Ej data."}
-    ### [KÄLLA: Övrigt]
-    {text_o if text_o.strip() else "Ej data."}
+    {text_c1}
+    {text_c2}
+    {text_e}
+    {text_m}
+    {text_o}
     """
     
-    if not any([text_c1.strip(), text_c2.strip(), text_e.strip(), text_m.strip(), text_o.strip()]):
+    if not combined_input.strip():
         st.warning("Du behöver klistra in text i minst en flik först!")
     else:
-        chunk_size = 12000
+        chunk_size = 18000
         text_chunks = [combined_input[i:i+chunk_size] for i in range(0, len(combined_input), chunk_size)]
         
         all_parsed_data = []
-        today_str = datetime.now().strftime("%Y-%m-%d")
         
         progress_bar = st.progress(0)
         status_text = st.empty()
@@ -82,27 +76,21 @@ if st.button("🚀 Analysera & Sammanfatta alla uppdrag", type="primary", use_co
             progress_bar.progress((idx + 1) / len(text_chunks))
             
             prompt = f"""
-            Du är en expert på Business Development / GTM för konsultbolag inom offentlig sektor. 
-            Dagens datum är {today_str}. 
-            Analysera råtexten nedan (del {idx+1} av {len(text_chunks)}). 
-            
-            Extrahera ALLA upphandlingar eller tilldelningsmeddelanden som finns i texten utan att begränsa antalet.
-            
-            Returnera resultatet ENDAST som en giltig JSON-lista med objekt. Inga markdown-backticks kring JSON-svaret (returnera rå JSON som börjar med [ och slutar med ]). Varje objekt ska ha exakt dessa nycklar:
-            - "Deadline": (Datum i formatet ÅÅÅÅ-MM-DD, eller "Ej angivet")
-            - "Myndighet": (Organisation/Köpare)
-            - "Upphandling": (Titel på upphandlingen eller tilldelningen)
-            - "Sammanfattning": (En kort, kärnfull sammanfattning på 1-2 meningar om vad uppdraget avser)
-            - "Saljvinkel": (Kort säljrekommendation / vinkel för konsultteamet)
+            Extrahera alla upphandlingar från texten nedan. Svara ENDAST med en giltig JSON-lista utan markdown-backticks.
+            Varje objekt i listan måste ha exakt dessa nycklar:
+            - "Deadline": Datum (eller "Ej angivet")
+            - "Myndighet": Köpare
+            - "Upphandling": Titel
+            - "Sammanfattning": Kort mening om vad det gäller.
 
-            Råtext att analysera:
+            Text:
             {chunk}
             """
             
             try:
                 response = client.messages.create(
-                    model="claude-sonnet-5",
-                    max_tokens=4000,
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=1500,
                     messages=[{"role": "user", "content": prompt}]
                 )
                 
@@ -131,24 +119,8 @@ if st.button("🚀 Analysera & Sammanfatta alla uppdrag", type="primary", use_co
         progress_bar.empty()
         
         if all_parsed_data:
-            st.success(f"✅ Hittade totalt {len(all_parsed_data)} uppdrag!")
-            
-            # Konvertera till DataFrame för snygg tabellvisning med sammanfattningskolumn efter Myndighet
+            st.success(f"✅ Hittade {len(all_parsed_data)} uppdrag!")
             df_results = pd.DataFrame(all_parsed_data)
-            
-            # Säkerställ att kolumnerna ligger i rätt ordning om de finns
-            desired_columns = ["Deadline", "Myndighet", "Sammanfattning", "Upphandling", "Saljvinkel"]
-            existing_cols = [col for col in desired_columns if col in df_results.columns]
-            df_results = df_results[existing_cols]
-            
             st.dataframe(df_results, use_container_width=True, hide_index=True)
-            
-            # Alternativt en detaljerad vy nedanför om man vill läsa mer
-            st.markdown("### 📌 Detaljerad vy per uppdrag")
-            for item in all_parsed_data:
-                with st.expander(f"{item.get('Myndighet', 'Okänd')} – {item.get('Upphandling', 'Ingen titel')}"):
-                    st.write(f"**Deadline:** {item.get('Deadline', 'Ej angivet')}")
-                    st.write(f"**Sammanfattning:** {item.get('Sammanfattning', 'Ingen sammanfattning')}")
-                    st.write(f"**GTM-vinkel:** {item.get('Saljvinkel', 'Ingen vinkel angiven')}")
         else:
-            st.warning("Kunde inte hitta några uppdrag att extrahera från den inlistade texten.")
+            st.warning("Kunde inte hitta några uppdrag att extrahera.")
