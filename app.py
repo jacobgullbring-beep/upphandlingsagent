@@ -50,7 +50,7 @@ with tab_ovrig:
 
 st.markdown("---")
 
-if st.button("🚀 Extrahera med Haiku 4.5", type="primary", use_container_width=True):
+if st.button("🚀 Visa avhandlingar", type="primary", use_container_width=True):
     
     combined_input = f"""
     {text_c1}
@@ -89,7 +89,7 @@ if st.button("🚀 Extrahera med Haiku 4.5", type="primary", use_container_width
             
             try:
                 response = client.messages.create(
-                    model="claude-haiku-4-5-20251001",
+                    model="claude-sonnet-5",
                     max_tokens=1500,
                     messages=[{"role": "user", "content": prompt}]
                 )
