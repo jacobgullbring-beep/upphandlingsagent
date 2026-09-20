@@ -164,7 +164,7 @@ if 'parsed_tenders' in st.session_state and st.session_state['parsed_tenders']:
     rows_for_ui = []
     for idx, item in enumerate(st.session_state['parsed_tenders']):
         rows_for_ui.append({
-            "Välj": True,
+            "Välj": False, # <-- Ändrat till False så de är avbockade som standard
             "Myndighet": item.get("Myndighet", ""),
             "Upphandling": item.get("Upphandling", ""),
             "Deadline": item.get("Deadline", ""),
@@ -189,13 +189,14 @@ if 'parsed_tenders' in st.session_state and st.session_state['parsed_tenders']:
     
     st.markdown("---")
     
-    with st.expander("🔍 Visa detaljerade sammanfattningar & säljvinklar för de valda uppdragen"):
-        for idx in selected_indices:
-            item = st.session_state['parsed_tenders'][idx]
-            st.markdown(f"**📌 {item.get('Myndighet', '')} – {item.get('Upphandling', '')}**")
-            st.markdown(f"*Sammanfattning:* {item.get('Sammanfattning', '')}")
-            st.markdown(f"*Säljvinkel:* {item.get('Saljvinkel', '')}")
-            st.divider()
+    if selected_indices:
+        with st.expander("🔍 Visa detaljerade sammanfattningar & säljvinklar för de valda uppdragen"):
+            for idx in selected_indices:
+                item = st.session_state['parsed_tenders'][idx]
+                st.markdown(f"**📌 {item.get('Myndighet', '')} – {item.get('Upphandling', '')}**")
+                st.markdown(f"*Sammanfattning:* {item.get('Sammanfattning', '')}")
+                st.markdown(f"*Säljvinkel:* {item.get('Saljvinkel', '')}")
+                st.divider()
 
     rows_for_excel = []
     for idx in selected_indices:
@@ -232,4 +233,4 @@ if 'parsed_tenders' in st.session_state and st.session_state['parsed_tenders']:
             type="primary"
         )
     else:
-        st.warning("Du har avbockat alla uppdrag. Välj minst ett uppdrag i tabellen ovan för att kunna ladda ner Excel-filen.")
+        st.info("💡 Bocka i minst ett uppdrag i tabellen ovan för att visa dess sammanfattning och aktivera nerladdning av Master-Excel.")
