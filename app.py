@@ -6,7 +6,7 @@ import json
 
 st.set_page_config(page_title="DAS Upphandlingsbevakning", page_icon="🛡️", layout="wide")
 
-st.title("🛡️ DAS Upphandlingsbevakning)
+st.title("🛡️ DAS Upphandlingsbevakning")
 st.write("Extraherar och visar enbart rena konsult-, rådgivnings- och digitaliseringsaffärer.")
 
 # --- SIDOMENY MED SNABBLÄNKAR ---
