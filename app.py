@@ -4,10 +4,10 @@ import anthropic
 import os
 import json
 
-st.set_page_config(page_title="GTM Upphandlingsbevakning", page_icon="⚡", layout="wide")
+st.set_page_config(page_title="GTM Upphandlingsbevakning", page_icon="🛡️", layout="wide")
 
-st.title("⚡ GTM Säljbevakning")
-st.write("Extraherar upphandlingar från dina inklistrade källor.")
+st.title("🛡️ GTM Säljbevakning (Konsultfokuserad)")
+st.write("Extraherar enbart relevanta upphandlingar inom konsulttjänster, IT, strategi och styrning.")
 
 # --- SIDOMENY MED SNABBLÄNKAR ---
 st.sidebar.header("🔗 Källor & Snabblänkar")
@@ -49,9 +49,8 @@ with tab_ovrig:
 
 st.markdown("---")
 
-if st.button("🚀 Extrahera uppdrag", type="primary", use_container_width=True):
+if st.button("🚀 Extrahera relevanta konsultuppdrag", type="primary", use_container_width=True):
     
-    # Bygg ihop med tydliga block så att modellen skiljer på dem
     combined_parts = []
     if text_c1.strip(): combined_parts.append(f"--- KOMMERS NOTICES ---\n{text_c1}")
     if text_c2.strip(): combined_parts.append(f"--- KOMMERS ELITE ---\n{text_c2}")
@@ -68,17 +67,23 @@ if st.button("🚀 Extrahera uppdrag", type="primary", use_container_width=True)
         
         progress_bar = st.progress(0)
         status_text = st.empty()
-        status_text.text("Analyserar och extraherar upphandlingar...")
+        status_text.text("Filtrerar bort skräp och letar relevanta konsultaffärer...")
         progress_bar.progress(50)
         
+        # HÄR ÄR DEN SKÄRPADE PROMPTEN
         prompt = f"""
-        Läs igenom hela texten nedan som innehåller upphandlingar från olika källor.
-        Extrahera VARJE enskild upphandling du hittar. Svara ENDAST med en giltig JSON-lista utan markdown-backticks (ska börja med [ och sluta med ]).
+        Du är en affärsutvecklare och säljare för ett större management- och konsultbolag (som verkar inom bl.a. management, strategi, IT-digitalisering, verksamhetsutveckling, förändringsledning samt försvar och säkerhet).
+        
+        Läs igenom texten nedan och utför följande:
+        1. STRRIKT FILTRERING: Exkludera allt som handlar om byggentreprenader, fastighetsskötsel, fysiska varuinköp (t.ex. larm, utrustning, maskiner), livsmedel, drift av idrottsanläggningar/isrinkar, städ eller andra fysiska/operativa entreprenader där konsultbolag inte kan lämna anbud.
+        2. INKLUDERA ENDAST: Upphandlingar som avser konsulttjänster, rådgivning, IT-utveckling, systemstöd, projektledning, programledarskap, juridisk/ekonomisk rådgivning, analys, cybersäkerhet eller strategiskt stöd till kommuner, regioner, myndigheter eller statliga bolag.
+        
+        Svara ENDAST med en giltig JSON-lista utan markdown-backticks (ska börja med [ och sluta med ]). Om inga relevanta uppdrag hittas, returnera en tom lista ([]).
         Varje objekt i listan måste ha exakt dessa nycklar:
         - "Deadline": Datum (eller "Ej angivet")
         - "Myndighet": Köpare / organisation
         - "Upphandling": Titel på upphandlingen
-        - "Sammanfattning": Kort mening om vad det gäller.
+        - "Relevans/Affärsmöjlighet": Varför detta är intressant för ett konsultbolag.
 
         Text att analysera:
         {combined_input}
@@ -108,15 +113,15 @@ if st.button("🚀 Extrahera uppdrag", type="primary", use_container_width=True)
                     clean_json = clean_json[start_idx:end_idx+1]
                     all_parsed_data = json.loads(clean_json)
         except Exception as e:
-            st.error(fows := f"Ett fel uppstod vid tolkningen: {e}")
+            st.error(f"Ett fel uppstod vid tolkningen: {e}")
         
         progress_bar.progress(100)
         status_text.empty()
         progress_bar.empty()
         
         if all_parsed_data and isinstance(all_parsed_data, list):
-            st.success(f"✅ Hittade totalt {len(all_parsed_data)} uppdrag!")
+            st.success(f"✅ Hittade {len(all_parsed_data)} relevanta konsultuppdrag!")
             df_results = pd.DataFrame(all_parsed_data)
             st.dataframe(df_results, use_container_width=True, hide_index=True)
         else:
-            st.warning("Kunde inte extrahera flera uppdrag. Kontrollera att texten som klistrades in innehåller tydliga listor eller titlar.")
+            st.warning("Hittade inga uppdrag som matchade kriterierna för konsulttjänster i den inklistrade texten.")
