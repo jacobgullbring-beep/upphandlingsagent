@@ -6,7 +6,7 @@ import json
 
 st.set_page_config(page_title="DAS Upphandlingsbevakning", page_icon="🛡️", layout="wide")
 
-st.title("🛡️ GTM DAS Upphandlingsbevakning")
+st.title("🛡️ DAS Upphandlingsbevakning")
 st.write("Extraherar och visar enbart rena konsult-, rådgivning- och digitaliseringsaffärer.")
 
 # --- SIDOMENY MED SNABBLÄNKAR ---
@@ -67,16 +67,16 @@ if st.button("🚀 Extrahera och rensa bort allt ointressant", type="primary", u
         
         progress_bar = st.progress(0)
         status_text = st.empty()
-        status_text.text("Går igenom texten rad för rad och matchar rätt datum/status...")
+        status_text.text("Går igenom texten rad för rad och rensar bort bygg/anläggning...")
         progress_bar.progress(50)
         
         prompt = f"""
         Du är en extremt noggrann affärsutvecklare för ett management- och konsultbolag. 
         Gå igenom ALLA inklistrade sidor rad för rad från början till slut. Du får inte missa några upphandlingar.
 
-        Utför denna strikta filtrering:
-        1. TA BORT HELT: Byggentreprenader, fastighetsskötsel, fysiska varor, larm, utrustning, livsmedel, isrinkar/idrottsanläggningar, städ, sotning och rena entreprenader.
-        2. BEHÅLL ENDAST: Konsulttjänster, rådgivning, IT, systemutveckling, projektledning, programledarskap, förändringsledning, säkerhetsanalys, miljöutredningar eller strategiskt stöd.
+        UTFÖR DENNA ABSOLUT STRIKTA FILTRERING:
+        1. SKALL-REGEL - TA BORT OMEDELBART: Allt som rör bygg, anläggning, mark, fastighetsskötsel, byggledning, projektering för bygg/installationer, fysiska varor, larm, utrustning, livsmedel, isrinkar/idrottsanläggningar, städ, sotning och rena entreprenader. (Om ordet "bygg", "anläggning" eller "byggledare" förekommer i titeln eller sammanhanget -> KASTA BORT).
+        2. BEHÅLL ENDAST: Rena konsulttjänster, management, rådgivning, IT, systemutveckling, projektledning (inom IT/verksamhet, EJ bygg), programledarskap, förändringsledning, säkerhetsanalys, miljöutredningar eller strategiskt stöd.
         
         VIKTIGT OM DEADLINE / STATUS:
         - Leta efter sista anbudsdag (t.ex. datumformat eller "2026-10-13").
@@ -125,7 +125,7 @@ if st.button("🚀 Extrahera och rensa bort allt ointressant", type="primary", u
         progress_bar.empty()
         
         if all_parsed_data and isinstance(all_parsed_data, list):
-            st.success(f"✅ Rensningen klar! Visar {len(all_parsed_data)} relevanta uppdrag.")
+            st.success(f"✅ Rensningen klar! Visar {len(all_parsed_data)} strikt relevanta uppdrag.")
             df_results = pd.DataFrame(all_parsed_data)
             st.dataframe(df_results, use_container_width=True, hide_index=True)
         else:
