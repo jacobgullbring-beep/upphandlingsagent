@@ -4,3 +4,4 @@ feedparser
 anthropic
 requests
 beautifulsoup4
+openpyxl
