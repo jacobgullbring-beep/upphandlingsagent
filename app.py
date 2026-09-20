@@ -22,7 +22,7 @@ st.markdown(
 )
 
 st.title("🏛️ DAS Upphandlingsbevakning")
-st.write("Analyserar era klistrade källor och kan generera en strukturerad tabell samt Excel-fil.")
+st.write("Analyserar källor och genererar en överskådlig tabell samt komplett Excel-fil.")
 
 # --- SIDOMENY MED SNABBLÄNKAR ---
 st.sidebar.header("🔗 Källor & Snabblänkar")
@@ -152,9 +152,12 @@ if st.button("🚀 Analysera & Generera Master-Excel", type="primary", use_conta
         if all_parsed_data:
             st.success(f"✅ Hittade {len(all_parsed_data)} relevanta uppdrag!")
             
-            rows_for_df = []
+            rows_for_excel = []
+            rows_for_ui = []
+            
             for item in all_parsed_data:
-                rows_for_df.append({
+                # Fullständig data för Excel
+                rows_for_excel.append({
                     "Myndighet": item.get("Myndighet", ""),
                     "Upphandling": item.get("Upphandling", ""),
                     "Sammanfattning": item.get("Sammanfattning", ""),
@@ -170,23 +173,41 @@ if st.button("🚀 Analysera & Generera Master-Excel", type="primary", use_conta
                     "Utfall": "",
                     "Källa": item.get("Källa", "")
                 })
+                
+                # Renare och kortare tabell för själva gränssnittet (utan långa brödtexter)
+                rows_for_ui.append({
+                    "Myndighet": item.get("Myndighet", ""),
+                    "Upphandling": item.get("Upphandling", ""),
+                    "Deadline": item.get("Deadline", ""),
+                    "Omfattning": item.get("Omfattning", ""),
+                    "Källa": item.get("Källa", "")
+                })
             
-            df_master = pd.DataFrame(rows_for_df)
+            df_ui = pd.DataFrame(rows_for_ui)
+            df_master = pd.DataFrame(rows_for_excel)
             
-            # --- VISA TABELL DIREKT I APPEN ---
-            st.subheader("📊 Samlad Översiktstabell")
-            st.dataframe(df_master, use_container_width=True, hide_index=True)
+            # --- KOMPAKT ÖVERSIKTSTABELL I APPEN ---
+            st.subheader("📊 Översiktstabell")
+            st.dataframe(df_ui, use_container_width=True, hide_index=True)
             
             st.markdown("---")
             
-            # Skapa Excel-fil i minnet för nedladdning
+            # --- EXPANDERS FÖR ATT LÄSA SAMMANFATTNING UTAN ATT SKROLLA TABELL ---
+            with st.expander("🔍 Visa detaljerade sammanfattningar & säljvinklar per uppdrag"):
+                for item in all_parsed_data:
+                    st.markdown(f"**📌 {item.get('Myndighet', '')} – {item.get('Upphandling', '')}**")
+                    st.markdown(f"*Sammanfattning:* {item.get('Sammanfattning', '')}")
+                    st.markdown(f"*Säljvinkel:* {item.get('Saljvinkel', '')}")
+                    st.divider()
+
+            # Skapa Excel-fil i minnet för nedladdning med alla kolumner
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df_master.to_excel(writer, index=False, sheet_name='Upphandlingar')
             excel_data = output.getvalue()
             
             st.download_button(
-                label="📥 Ladda ner Master-Excel med era kolumner",
+                label="📥 Ladda ner Master-Excel (med alla kolumner & full text)",
                 data=excel_data,
                 file_name=f"GTM_Upphandlingar_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
