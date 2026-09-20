@@ -6,7 +6,7 @@ import json
 
 st.set_page_config(page_title="DAS Upphandlingsbevakning", page_icon="🛡️", layout="wide")
 
-st.title("🛡️ DAS Upphandlingsbevakning")
+st.title("🛡️ GTM DAS Upphandlingsbevakning")
 st.write("Extraherar och visar enbart rena konsult-, rådgivning- och digitaliseringsaffärer.")
 
 # --- SIDOMENY MED SNABBLÄNKAR ---
@@ -67,7 +67,7 @@ if st.button("🚀 Extrahera och rensa bort allt ointressant", type="primary", u
         
         progress_bar = st.progress(0)
         status_text = st.empty()
-        status_text.text("Går igenom texten rad för rad och filtrerar bort allt ointressant...")
+        status_text.text("Går igenom texten rad för rad och matchar rätt datum/status...")
         progress_bar.progress(50)
         
         prompt = f"""
@@ -78,9 +78,14 @@ if st.button("🚀 Extrahera och rensa bort allt ointressant", type="primary", u
         1. TA BORT HELT: Byggentreprenader, fastighetsskötsel, fysiska varor, larm, utrustning, livsmedel, isrinkar/idrottsanläggningar, städ, sotning och rena entreprenader.
         2. BEHÅLL ENDAST: Konsulttjänster, rådgivning, IT, systemutveckling, projektledning, programledarskap, förändringsledning, säkerhetsanalys, miljöutredningar eller strategiskt stöd.
         
+        VIKTIGT OM DEADLINE / STATUS:
+        - Leta efter sista anbudsdag (t.ex. datumformat eller "2026-10-13").
+        - Om det står "Ongoing bidding" eller att sista anbudsdag saknar specifikt datum men är löpande, skriv "Löpande / Ongoing" istället för "Ej angivet".
+        - Förväxla aldrig publiceringsdatum med sista anbudsdag.
+        
         Svara ENDAST med en giltig JSON-lista utan markdown-backticks (ska börja med [ och sluta med ]). Om inga relevanta uppdrag hittas, returnera en helt tom lista ([]).
         Varje objekt i listan måste ha exakt dessa nycklar:
-        - "Deadline": Datum (eller "Ej angivet")
+        - "Deadline": Datum eller "Löpande / Ongoing"
         - "Myndighet": Köpare / organisation
         - "Upphandling": Titel på upphandlingen
         - "Relevans/Affärsmöjlighet": Varför detta är intressant för konsultbolaget.
