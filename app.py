@@ -93,7 +93,6 @@ if st.button("🚀 Extrahera och rensa bort allt ointressant", type="primary", u
             response = client.messages.create(
                 model="claude-haiku-4-5-20251001",
                 max_tokens=4000,
-                temperature=0.0,
                 messages=[{"role": "user", "content": prompt}]
             )
             
