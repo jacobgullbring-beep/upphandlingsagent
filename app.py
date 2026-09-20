@@ -7,7 +7,7 @@ import json
 st.set_page_config(page_title="DAS Upphandlingsbevakning", page_icon="🛡️", layout="wide")
 
 st.title("🛡️ DAS Upphandlingsbevakning")
-st.write("Extraherar och visar enbart rena konsult-, rådgivnings- och digitaliseringsaffärer.")
+st.write("Extraherar och visar enbart rena konsult-, rådgivning- och digitaliseringsaffärer.")
 
 # --- SIDOMENY MED SNABBLÄNKAR ---
 st.sidebar.header("🔗 Källor & Snabblänkar")
@@ -67,15 +67,16 @@ if st.button("🚀 Extrahera och rensa bort allt ointressant", type="primary", u
         
         progress_bar = st.progress(0)
         status_text = st.empty()
-        status_text.text("Filtrerar bort allt skräp och tar bort icke-relevanta uppdrag...")
+        status_text.text("Går igenom texten rad för rad och filtrerar bort allt ointressant...")
         progress_bar.progress(50)
         
         prompt = f"""
-        Du är en affärsutvecklare för ett management- och konsultbolag. 
-        Läs igenom texten nedan och utför följande strikta filtrering:
-        
-        1. TA BORT HELT: Allt som rör byggentreprenader, fastighetsskötsel, fysiska varor, larm, utrustning, livsmedel, isrinkar/idrottsanläggningar, städ eller andra fysiska entreprenader. Dessa ska INTE finnas med i listan överhuvudtaget.
-        2. BEHÅLL ENDAST: Klara uppdrag inom konsulttjänster, rådgivning, IT, systemutveckling, projektledning, programledarskap, förändringsledning, säkerhetsanalys eller strategiskt stöd.
+        Du är en extremt noggrann affärsutvecklare för ett management- och konsultbolag. 
+        Gå igenom ALLA inklistrade sidor rad för rad från början till slut. Du får inte missa några upphandlingar.
+
+        Utför denna strikta filtrering:
+        1. TA BORT HELT: Byggentreprenader, fastighetsskötsel, fysiska varor, larm, utrustning, livsmedel, isrinkar/idrottsanläggningar, städ, sotning och rena entreprenader.
+        2. BEHÅLL ENDAST: Konsulttjänster, rådgivning, IT, systemutveckling, projektledning, programledarskap, förändringsledning, säkerhetsanalys, miljöutredningar eller strategiskt stöd.
         
         Svara ENDAST med en giltig JSON-lista utan markdown-backticks (ska börja med [ och sluta med ]). Om inga relevanta uppdrag hittas, returnera en helt tom lista ([]).
         Varje objekt i listan måste ha exakt dessa nycklar:
@@ -92,6 +93,7 @@ if st.button("🚀 Extrahera och rensa bort allt ointressant", type="primary", u
             response = client.messages.create(
                 model="claude-haiku-4-5-20251001",
                 max_tokens=4000,
+                temperature=0.0,
                 messages=[{"role": "user", "content": prompt}]
             )
             
