@@ -3,12 +3,11 @@ import pandas as pd
 import anthropic
 import os
 import json
-from datetime import datetime
 
-st.set_page_config(page_title="DAS Upphandlingsbevakning", page_icon="⚡", layout="wide")
+st.set_page_config(page_title="GTM Upphandlingsbevakning", page_icon="⚡", layout="wide")
 
-st.title("⚡ DAS Säljbevakning")
-st.write("Extraherar upphandlingar snabbt och kostnadseffektivt.")
+st.title("⚡ GTM Säljbevakning")
+st.write("Extraherar upphandlingar från dina inklistrade källor.")
 
 # --- SIDOMENY MED SNABBLÄNKAR ---
 st.sidebar.header("🔗 Källor & Snabblänkar")
@@ -50,77 +49,74 @@ with tab_ovrig:
 
 st.markdown("---")
 
-if st.button("🚀 Visa avhandlingar", type="primary", use_container_width=True):
+if st.button("🚀 Extrahera uppdrag", type="primary", use_container_width=True):
     
-    combined_input = f"""
-    {text_c1}
-    {text_c2}
-    {text_e}
-    {text_m}
-    {text_o}
-    """
+    # Bygg ihop med tydliga block så att modellen skiljer på dem
+    combined_parts = []
+    if text_c1.strip(): combined_parts.append(f"--- KOMMERS NOTICES ---\n{text_c1}")
+    if text_c2.strip(): combined_parts.append(f"--- KOMMERS ELITE ---\n{text_c2}")
+    if text_e.strip(): combined_parts.append(f"--- E-AVROP ---\n{text_e}")
+    if text_m.strip(): combined_parts.append(f"--- MERCELL ---\n{text_m}")
+    if text_o.strip(): combined_parts.append(f"--- ÖVRIGT ---\n{text_o}")
+    
+    combined_input = "\n\n".join(combined_parts)
     
     if not combined_input.strip():
         st.warning("Du behöver klistra in text i minst en flik först!")
     else:
-        chunk_size = 18000
-        text_chunks = [combined_input[i:i+chunk_size] for i in range(0, len(combined_input), chunk_size)]
-        
         all_parsed_data = []
         
         progress_bar = st.progress(0)
         status_text = st.empty()
+        status_text.text("Analyserar och extraherar upphandlingar...")
+        progress_bar.progress(50)
         
-        for idx, chunk in enumerate(text_chunks):
-            status_text.text(f"Bearbetar del {idx+1} av {len(text_chunks)}...")
-            progress_bar.progress((idx + 1) / len(text_chunks))
-            
-            prompt = f"""
-            Extrahera alla upphandlingar från texten nedan. Svara ENDAST med en giltig JSON-lista utan markdown-backticks.
-            Varje objekt i listan måste ha exakt dessa nycklar:
-            - "Deadline": Datum (eller "Ej angivet")
-            - "Myndighet": Köpare
-            - "Upphandling": Titel
-            - "Sammanfattning": Kort mening om vad det gäller.
+        prompt = f"""
+        Läs igenom hela texten nedan som innehåller upphandlingar från olika källor.
+        Extrahera VARJE enskild upphandling du hittar. Svara ENDAST med en giltig JSON-lista utan markdown-backticks (ska börja med [ och sluta med ]).
+        Varje objekt i listan måste ha exakt dessa nycklar:
+        - "Deadline": Datum (eller "Ej angivet")
+        - "Myndighet": Köpare / organisation
+        - "Upphandling": Titel på upphandlingen
+        - "Sammanfattning": Kort mening om vad det gäller.
 
-            Text:
-            {chunk}
-            """
-            
-            try:
-                response = client.messages.create(
-                    model="claude-sonnet-5",
-                    max_tokens=1500,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                
-                raw_output = "".join([block.text for block in response.content if hasattr(block, "text")])
-                
-                if raw_output.strip():
-                    clean_json = raw_output.strip()
-                    if "```json" in clean_json:
-                        clean_json = clean_json.split("```json")[1]
-                    if "```" in clean_json:
-                        clean_json = clean_json.split("```")[0]
-                    clean_json = clean_json.strip()
-                    
-                    start_idx = clean_json.find("[")
-                    end_idx = clean_json.rfind("]")
-                    
-                    if start_idx != -1 and end_idx != -1:
-                        clean_json = clean_json[start_idx:end_idx+1]
-                        chunk_data = json.loads(clean_json)
-                        if isinstance(chunk_data, list):
-                            all_parsed_data.extend(chunk_data)
-            except Exception as e:
-                continue
+        Text att analysera:
+        {combined_input}
+        """
         
+        try:
+            response = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=4000,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            
+            raw_output = "".join([block.text for block in response.content if hasattr(block, "text")])
+            
+            if raw_output.strip():
+                clean_json = raw_output.strip()
+                if "```json" in clean_json:
+                    clean_json = clean_json.split("```json")[1]
+                if "```" in clean_json:
+                    clean_json = clean_json.split("```")[0]
+                clean_json = clean_json.strip()
+                
+                start_idx = clean_json.find("[")
+                end_idx = clean_json.rfind("]")
+                
+                if start_idx != -1 and end_idx != -1:
+                    clean_json = clean_json[start_idx:end_idx+1]
+                    all_parsed_data = json.loads(clean_json)
+        except Exception as e:
+            st.error(fows := f"Ett fel uppstod vid tolkningen: {e}")
+        
+        progress_bar.progress(100)
         status_text.empty()
         progress_bar.empty()
         
-        if all_parsed_data:
-            st.success(f"✅ Hittade {len(all_parsed_data)} uppdrag!")
+        if all_parsed_data and isinstance(all_parsed_data, list):
+            st.success(f"✅ Hittade totalt {len(all_parsed_data)} uppdrag!")
             df_results = pd.DataFrame(all_parsed_data)
             st.dataframe(df_results, use_container_width=True, hide_index=True)
         else:
-            st.warning("Kunde inte hitta några uppdrag att extrahera.")
+            st.warning("Kunde inte extrahera flera uppdrag. Kontrollera att texten som klistrades in innehåller tydliga listor eller titlar.")
