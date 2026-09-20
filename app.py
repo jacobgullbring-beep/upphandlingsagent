@@ -158,50 +158,38 @@ if st.button("🚀 Analysera & Filtrera (Inkl. Civilt Försvar & Kommuner)", typ
 if 'parsed_tenders' in st.session_state and st.session_state['parsed_tenders']:
     st.markdown("---")
     st.subheader("📊 Välj uppdrag för Excel-export")
-    st.write("Bocka i de uppdrag du vill ta med i Master-Excel (alla sammanfattningar och säljvinklar visas nedanför):")
+    st.write("Bocka i kryssrutan för de uppdrag du vill ta med i Master-Excel:")
 
-    rows_for_ui = []
+    selected_indices = []
+    
+    # Skapa en ren tabell med st.dataframe för att visa översikten stabilt
+    table_data = []
     for idx, item in enumerate(st.session_state['parsed_tenders']):
-        rows_for_ui.append({
-            "Välj": False,
-            "Myndighet": str(item.get("Myndighet", "")),
-            "Upphandling": str(item.get("Upphandling", "")),
-            "Deadline": str(item.get("Deadline", "")),
-            "Omfattning": str(item.get("Omfattning", "")),
-            "Källa": str(item.get("Källa", "")),
-            "id": idx
+        table_data.append({
+            "Myndighet": item.get("Myndighet", ""),
+            "Upphandling": item.get("Upphandling", ""),
+            "Deadline": item.get("Deadline", ""),
+            "Omfattning": item.get("Omfattning", ""),
+            "Källa": item.get("Källa", "")
         })
     
-    df_ui = pd.DataFrame(rows_for_ui)
+    st.dataframe(pd.DataFrame(table_data), use_container_width=True, hide_index=True)
     
-    edited_df = st.data_editor(
-        df_ui,
-        columns={
-            "id": None,
-            "Välj": st.column_config.CheckboxColumn("Välj till Excel", default=False),
-            "Myndighet": st.column_config.TextColumn("Myndighet", disabled=True),
-            "Upphandling": st.column_config.TextColumn("Upphandling", disabled=True),
-            "Deadline": st.column_config.TextColumn("Deadline", disabled=True),
-            "Omfattning": st.column_config.TextColumn("Omfattning", disabled=True),
-            "Källa": st.column_config.TextColumn("Källa", disabled=True),
-        },
-        use_container_width=True,
-        hide_index=True,
-        key="tender_editor"
-    )
+    st.markdown("### 🗂️ Välj vilka som ska exporteras & Läs sammanfattningar")
     
-    selected_indices = edited_df[edited_df["Välj"] == True]["id"].tolist()
-    
-    st.markdown("---")
-    
-    # Visar alltid sammanfattning och säljvinkel för ALLA hittade uppdrag direkt
-    with st.expander("🔍 Sammanfattningar & Säljvinklar (Alla hittade uppdrag)", expanded=True):
-        for idx, item in enumerate(st.session_state['parsed_tenders']):
-            st.markdown(f"**📌 {item.get('Myndighet', '')} – {item.get('Upphandling', '')}**")
-            st.markdown(f"*Sammanfattning:* {item.get('Sammanfattning', '')}")
-            st.markdown(f"*Säljvinkel:* {item.get('Saljvinkel', '')}")
-            if idx < len(st.session_state['parsed_tenders']) - 1:
-                st.divider()
+    for idx, item in enumerate(st.session_state['parsed_tenders']):
+        with st.container():
+            col1, col2 = st.columns([0.05, 0.95])
+            with col1:
+                is_selected = st.checkbox("Välj", key=f"chk_{idx}", label_visibility="collapsed")
+                if is_selected:
+                    selected_indices.append(idx)
+            with col2:
+                st.markdown(f"**📌 {item.get('Myndighet', '')} – {item.get('Upphandling', '')}**")
+                st.markdown(f"*Deadline:* `{item.get('Deadline', '')}` | *Omfattning:* `{item.get('Omfattning', '')}` | *Källa:* `{item.get('Källa', '')}`")
+                st.markdown(f"*Sammanfattning:* {item.get('Sammanfattning', '')}")
+                st.markdown(f"*Säljvinkel:* {item.get('Saljvinkel', '')}")
+            st.divider()
 
     rows_for_excel = []
     for idx in selected_indices:
@@ -238,4 +226,4 @@ if 'parsed_tenders' in st.session_state and st.session_state['parsed_tenders']:
             type="primary"
         )
     else:
-        st.info("💡 Bocka i uppdrag i tabellen ovan för att aktivera nerladdning av Master-Excel-filen.")
+        st.info("💡 Bocka i minst ett uppdrag ovan för att aktivera nerladdning av Master-Excel-filen.")
