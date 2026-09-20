@@ -105,11 +105,15 @@ if st.button("🚀 Analysera & Filtrera (Inkl. Civilt Försvar & Kommuner)", typ
                - Upphandlingar från **kommuner och regioner** som har en direkt koppling till **civilt försvar, totalförsvar, krisberedskap, säkerhetsskydd, informationssäkerhet, robusthet eller skyddsobjekt**.
             2. **RENSA BORT:** Allmänna, rent civila kommunala upphandlingar som inte berör säkerhet eller beredskap (t.ex. standard HR-stöd för vanliga förvaltningar, skolutbildning, socialtjänst, vanliga IT-system för administration eller lokal fastighetsskötsel/bygg).
             
+            VIKTIGT OM EXTRAHERING:
+            - **Deadline:** Leta noga efter datum (t.ex. ÅÅÅÅ-MM-DD) eller tidsuttryck (t.ex. "2 days left", "Tomorrow") kopplat till raden och översätt till datumformat om möjligt. Om det står i närheten av upphandlingen, missa det inte!
+            - **Omfattning:** Leta efter summor, timmar, ramavtalsperioder eller värden (t.ex. "100 miljoner SEK", "2 år"). Om inget nämns, skriv "Ej angivet".
+            
             Returnera resultatet ENDAST som en giltig JSON-lista med relevanta objekt. Inga markdown-backticks kring JSON-svaret (returnera rå JSON som börjar med [ och slutar med ]). Varje objekt ska ha exakt dessa nycklar:
             - "Myndighet": (Organisation/Köpare)
             - "Upphandling": (Titel på upphandlingen)
-            - "Deadline": (Sista svarsdag om det framgår, annars "Ej angivet")
-            - "Omfattning": (Uppskattad omfattning i timmar eller belopp om det nämns, annars "Ej angivet")
+            - "Deadline": (Sista svarsdag, format ÅÅÅÅ-MM-DD om möjligt, annars "Ej angivet")
+            - "Omfattning": (Uppskattad omfattning i timmar, miljonbelopp eller tid om det nämns, annars "Ej angivet")
             - "Sammanfattning": (En fyllig sammanfattning på 2-3 meningar om vad upphandlingen avser med fokus på säkerhet/försvar/beredskap)
             - "Saljvinkel": (Konkret rekommendation på hur PA Consulting inom Defence & Security bör positionera sig)
             - "Källa": (Vilken plattform det kom från)
@@ -162,7 +166,6 @@ if 'parsed_tenders' in st.session_state and st.session_state['parsed_tenders']:
 
     selected_indices = []
     
-    # Skapa en ren tabell med st.dataframe för att visa översikten stabilt
     table_data = []
     for idx, item in enumerate(st.session_state['parsed_tenders']):
         table_data.append({
