@@ -8,7 +8,6 @@ import io
 
 st.set_page_config(page_title="DAS Upphandlingsbevakning - Defence & Security", page_icon="🛡️", layout="wide")
 
-# --- ANPASSAD CSS FÖR SMALARE SIDEBAR ---
 st.markdown(
     """
     <style>
@@ -158,48 +157,51 @@ if st.button("🚀 Analysera & Filtrera (Inkl. Civilt Försvar & Kommuner)", typ
 
 if 'parsed_tenders' in st.session_state and st.session_state['parsed_tenders']:
     st.markdown("---")
-    st.subheader("📊 Välj relevanta uppdrag")
-    st.write("Bocka i de uppdrag du vill titta närmare på och ta med i exporten:")
+    st.subheader("📊 Välj uppdrag för Excel-export")
+    st.write("Bocka i de uppdrag du vill ta med i Master-Excel (alla sammanfattningar och säljvinklar visas nedanför):")
 
     rows_for_ui = []
     for idx, item in enumerate(st.session_state['parsed_tenders']):
         rows_for_ui.append({
             "Välj": False,
-            "Myndighet": item.get("Myndighet", ""),
-            "Upphandling": item.get("Upphandling", ""),
-            "Deadline": item.get("Deadline", ""),
-            "Omfattning": item.get("Omfattning", ""),
-            "Källa": item.get("Källa", ""),
-            "_original_index": idx
+            "Myndighet": str(item.get("Myndighet", "")),
+            "Upphandling": str(item.get("Upphandling", "")),
+            "Deadline": str(item.get("Deadline", "")),
+            "Omfattning": str(item.get("Omfattning", "")),
+            "Källa": str(item.get("Källa", "")),
+            "id": idx
         })
     
     df_ui = pd.DataFrame(rows_for_ui)
     
     edited_df = st.data_editor(
-        df_ui.drop(columns=["_original_index"]),
+        df_ui,
+        columns={
+            "id": None,
+            "Välj": st.column_config.CheckboxColumn("Välj till Excel", default=False),
+            "Myndighet": st.column_config.TextColumn("Myndighet", disabled=True),
+            "Upphandling": st.column_config.TextColumn("Upphandling", disabled=True),
+            "Deadline": st.column_config.TextColumn("Deadline", disabled=True),
+            "Omfattning": st.column_config.TextColumn("Omfattning", disabled=True),
+            "Källa": st.column_config.TextColumn("Källa", disabled=True),
+        },
         use_container_width=True,
         hide_index=True,
         key="tender_editor"
     )
     
-    selected_indices = []
-    for i, row in edited_df.iterrows():
-        if row["Välj"]:
-            selected_indices.append(df_ui.iloc[i]["_original_index"])
+    selected_indices = edited_df[edited_df["Välj"] == True]["id"].tolist()
     
     st.markdown("---")
     
-    # Visar alltid expandern, men anpassar texten beroende på om något är ikryssat eller ej
-    with st.expander("🔍 Detaljerade sammanfattningar & säljvinklar för valda uppdrag", expanded=True):
-        if selected_indices:
-            for idx in selected_indices:
-                item = st.session_state['parsed_tenders'][idx]
-                st.markdown(f"**📌 {item.get('Myndighet', '')} – {item.get('Upphandling', '')}**")
-                st.markdown(f"*Sammanfattning:* {item.get('Sammanfattning', '')}")
-                st.markdown(f"*Säljvinkel:* {item.get('Saljvinkel', '')}")
+    # Visar alltid sammanfattning och säljvinkel för ALLA hittade uppdrag direkt
+    with st.expander("🔍 Sammanfattningar & Säljvinklar (Alla hittade uppdrag)", expanded=True):
+        for idx, item in enumerate(st.session_state['parsed_tenders']):
+            st.markdown(f"**📌 {item.get('Myndighet', '')} – {item.get('Upphandling', '')}**")
+            st.markdown(f"*Sammanfattning:* {item.get('Sammanfattning', '')}")
+            st.markdown(f"*Säljvinkel:* {item.get('Saljvinkel', '')}")
+            if idx < len(st.session_state['parsed_tenders']) - 1:
                 st.divider()
-        else:
-            st.info("💡 Bocka i ett eller flera uppdrag i tabellen ovan för att läsa sammanfattning och säljvinkel här.")
 
     rows_for_excel = []
     for idx in selected_indices:
@@ -236,4 +238,4 @@ if 'parsed_tenders' in st.session_state and st.session_state['parsed_tenders']:
             type="primary"
         )
     else:
-        st.warning("Du behöver bocka i minst ett uppdrag i tabellen för att kunna ladda ner Excel-filen.")
+        st.info("💡 Bocka i uppdrag i tabellen ovan för att aktivera nerladdning av Master-Excel-filen.")
