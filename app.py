@@ -133,4 +133,103 @@ if st.button("🚀 Analysera & Filtrera (Inkl. Civilt Försvar & Kommuner)", typ
                     if "```json" in clean_json:
                         clean_json = clean_json.split("```json")[1]
                     if "```" in clean_json:
-                        clean_json = clean_json.split("
+                        clean_json = clean_json.split("```")[0]
+                    clean_json = clean_json.strip()
+                    
+                    start_idx = clean_json.find("[")
+                    end_idx = clean_json.rfind("]")
+                    
+                    if start_idx != -1 and end_idx != -1:
+                        clean_json = clean_json[start_idx:end_idx+1]
+                        chunk_data = json.loads(clean_json)
+                        if isinstance(chunk_data, list):
+                            all_parsed_data.extend(chunk_data)
+            except Exception as e:
+                continue
+        
+        status_text.empty()
+        progress_bar.empty()
+        
+        if all_parsed_data:
+            st.success(f"✅ Hittade {len(all_parsed_data)} relevanta uppdrag inom Defence, Säkerhet & Civilt försvar!")
+            st.session_state['parsed_tenders'] = all_parsed_data
+        else:
+            st.warning("Hittade inga upphandlingar som matchade kriterierna i den inklistrade texten.")
+
+if 'parsed_tenders' in st.session_state and st.session_state['parsed_tenders']:
+    st.markdown("---")
+    st.subheader("📊 Välj relevanta uppdrag")
+    st.write("Bocka i de uppdrag du vill ta med i exporten:")
+
+    rows_for_ui = []
+    for idx, item in enumerate(st.session_state['parsed_tenders']):
+        rows_for_ui.append({
+            "Välj": True,
+            "Myndighet": item.get("Myndighet", ""),
+            "Upphandling": item.get("Upphandling", ""),
+            "Deadline": item.get("Deadline", ""),
+            "Omfattning": item.get("Omfattning", ""),
+            "Källa": item.get("Källa", ""),
+            "_original_index": idx
+        })
+    
+    df_ui = pd.DataFrame(rows_for_ui)
+    
+    edited_df = st.data_editor(
+        df_ui.drop(columns=["_original_index"]),
+        use_container_width=True,
+        hide_index=True,
+        key="tender_editor"
+    )
+    
+    selected_indices = []
+    for i, row in edited_df.iterrows():
+        if row["Välj"]:
+            selected_indices.append(df_ui.iloc[i]["_original_index"])
+    
+    st.markdown("---")
+    
+    with st.expander("🔍 Visa detaljerade sammanfattningar & säljvinklar för de valda uppdragen"):
+        for idx in selected_indices:
+            item = st.session_state['parsed_tenders'][idx]
+            st.markdown(f"**📌 {item.get('Myndighet', '')} – {item.get('Upphandling', '')}**")
+            st.markdown(f"*Sammanfattning:* {item.get('Sammanfattning', '')}")
+            st.markdown(f"*Säljvinkel:* {item.get('Saljvinkel', '')}")
+            st.divider()
+
+    rows_for_excel = []
+    for idx in selected_indices:
+        item = st.session_state['parsed_tenders'][idx]
+        rows_for_excel.append({
+            "Myndighet": item.get("Myndighet", ""),
+            "Upphandling": item.get("Upphandling", ""),
+            "Sammanfattning": item.get("Sammanfattning", ""),
+            "Säljvinkel": item.get("Saljvinkel", ""),
+            "Go/No-go": "",
+            "Ansvarig konsult för anbudet": "",
+            "Medverkande konsulter": "",
+            "Deadline": item.get("Deadline", ""),
+            "Deadline internt": "",
+            "Deadline inlämning": "",
+            "Omfattning (i timmar/pengar)": item.get("Omfattning", ""),
+            "Status (Arbete pågår, inlämnad, avbruten)": "Arbete pågår",
+            "Utfall": "",
+            "Källa": item.get("Källa", "")
+        })
+    
+    if rows_for_excel:
+        df_master = pd.DataFrame(rows_for_excel)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df_master.to_excel(writer, index=False, sheet_name='Upphandlingar')
+        excel_data = output.getvalue()
+        
+        st.download_button(
+            label=f"📥 Ladda ner Master-Excel ({len(rows_for_excel)} markerade uppdrag)",
+            data=excel_data,
+            file_name=f"GTM_Defence_CiviltForsvar_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary"
+        )
+    else:
+        st.warning("Du har avbockat alla uppdrag. Välj minst ett uppdrag i tabellen ovan för att kunna ladda ner Excel-filen.")
