@@ -1,7 +1,5 @@
 streamlit
 pandas
-feedparser
-anthropic
-requests
-beautifulsoup4
 openpyxl
+anthropic
+playwright
