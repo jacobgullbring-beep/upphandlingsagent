@@ -1,34 +1,17 @@
 import streamlit as st
 import pandas as pd
+import requests
+from bs4 import BeautifulSoup
 import anthropic
 import os
 import json
 from datetime import datetime
 import io
 
-st.set_page_config(page_title="DAS Upphandlingsbevakning - Defence & Security", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="GTM Upphandlingsbevakning - Automatiskt", page_icon="🛡️", layout="wide")
 
-st.markdown(
-    """
-    <style>
-        [data-testid="stSidebar"] {
-            min-width: 220px;
-            max-width: 260px;
-        }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-st.title("🛡️ DAS Säljbevakning – Defence & Security")
-st.write("Filtret är ställt på Försvar, Säkerhet, Totalförsvar och Civilt försvar (inkl. relevanta kommun/region-uppdrag).")
-
-# --- SIDOMENY MED SNABBLÄNKAR ---
-st.sidebar.header("🔗 Källor & Snabblänkar")
-st.sidebar.markdown("- [e-Avrop](https://www.e-avrop.com/e-Upphandling/Default.aspx)")
-st.sidebar.markdown("- [Kommers Annons (Notices)](https://www.kommersannons.se/Notices/TenderNotices)")
-st.sidebar.markdown("- [Kommers Annons (eLite)](https://www.kommersannons.se/eLite/Notice/NoticeList.aspx)")
-st.sidebar.markdown("- [Mercell (Sverige)](https://app.mercell.com/search?filter=delivery_place_code%3ASE)")
+st.title("🛡️ Automatiskt GTM-bevakning – Försvar, Säkerhet & Offentlig Sektor")
+st.write("Skrapar samtliga sidor på e-Avrop automatiskt tills inga fler sidor finns kvar, och filtrerar ut relevanta affärer med hjälp av Claude 3.5 Haiku.")
 
 api_key = st.secrets.get("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
 
@@ -38,136 +21,142 @@ if not api_key:
 
 client = anthropic.Anthropic(api_key=api_key)
 
-tab_kommers_1, tab_kommers_2, tab_eavrop, tab_mercell, tab_ovrig = st.tabs([
-    "Kommers Annons (Notices)", 
-    "Kommers Annons (eLite)", 
-    "e-Avrop", 
-    "Mercell", 
-    "Övrigt"
-])
+TARGET_URL = "https://www.e-avrop.com/e-Upphandling/Default.aspx"
 
-with tab_kommers_1:
-    text_c1 = st.text_area("Klistra in från Kommers Annons (Notices):", height=150, key="c1")
+def scrape_eavrop_all_pages():
+    all_tenders = []
+    session = requests.Session()
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
 
-with tab_kommers_2:
-    text_c2 = st.text_area("Klistra in från Kommers Annons (eLite):", height=150, key="c2")
+    def extract_rows(soup_obj):
+        tenders = []
+        for table in soup_obj.find_all('table'):
+            for row in table.find_all('tr'):
+                cols = row.find_all('td')
+                if len(cols) >= 5:
+                    cols_text = [col.text.strip() for col in cols]
+                    title = cols_text[0]
+                    
+                    if title and "Logga in" not in title and "Bevaka" not in title:
+                        if title.isdigit() or (len(cols_text) > 1 and all(c.isdigit() for c in cols_text if c)):
+                            continue
+                            
+                        tenders.append({
+                            "Titel": title,
+                            "Publicerad": cols_text[1],
+                            "Organisation": cols_text[2],
+                            "Kontext": cols_text[3],
+                            "Deadline": cols_text[4]
+                        })
+        return tenders
 
-with tab_eavrop:
-    text_e = st.text_area("Klistra in från e-Avrop:", height=150, key="c2_e")
-
-with tab_mercell:
-    text_m = st.text_area("Klistra in från Mercell:", height=150, key="m")
-
-with tab_ovrig:
-    text_o = st.text_area("Klistra in från Övrig Källa:", height=150, key="o")
-
-st.markdown("---")
-
-if st.button("🚀 Analysera & Filtrera (Inkl. Civilt Försvar & Kommuner)", type="primary", use_container_width=True):
+    page = 1
+    max_pages = 40  # Säkerhetsgräns för att undvika oändlig loop
     
-    combined_input = f"""
-    ### [KÄLLA: Kommers Annons (Notices)]
-    {text_c1 if text_c1.strip() else "Ej data."}
-    ### [KÄLLA: Kommers Annons (eLite)]
-    {text_c2 if text_c2.strip() else "Ej data."}
-    ### [KÄLLA: e-Avrop]
-    {text_e if text_e.strip() else "Ej data."}
-    ### [KÄLLA: Mercell]
-    {text_m if text_m.strip() else "Ej data."}
-    ### [KÄLLA: Övrigt]
-    {text_o if text_o.strip() else "Ej data."}
-    """
+    progress_text = st.empty()
     
-    if not any([text_c1.strip(), text_c2.strip(), text_e.strip(), text_m.strip(), text_o.strip()]):
-        st.warning("Du behöver klistra in text i minst en flik först!")
-    else:
-        chunk_size = 12000
-        text_chunks = [combined_input[i:i+chunk_size] for i in range(0, len(combined_input), chunk_size)]
+    while page <= max_pages:
+        progress_text.text(f"Skrapar e-Avrop sida {page}...")
+        page_url = TARGET_URL if page == 1 else f"{TARGET_URL}?page={page}"
         
-        all_parsed_data = []
-        today_str = datetime.now().strftime("%Y-%m-%d")
+        try:
+            res = session.get(page_url, headers=headers, timeout=10)
+            if res.status_code != 200:
+                break
+                
+            soup = BeautifulSoup(res.text, 'html.parser')
+            rows = extract_rows(soup)
+            
+            # Om inga rader hittas eller om sidan är tom/slut på data
+            if not rows:
+                break
+                
+            # Kontrollera om vi fått samma data igen (om paginering loopar)
+            all_tenders.extend(rows)
+            page += 1
+        except Exception as e:
+            break
+            
+    progress_text.empty()
+    df = pd.DataFrame(all_tenders).drop_duplicates()
+    if not df.empty:
+        df = df[~df['Titel'].astype(str).str.match(r'^\d+$')]
+    return df
+
+if st.button("🚀 Starta helautomatisk skanning av ALLA sidor", type="primary", use_container_width=True):
+    with st.spinner("Skrapar samtliga sidor från e-Avrop och analyserar med Claude 3.5 Haiku..."):
+        df_raw = scrape_eavrop_all_pages()
         
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
-        for idx, chunk in enumerate(text_chunks):
-            status_text.text(f"Bearbetar del {idx+1} av {len(text_chunks)}...")
-            progress_bar.progress((idx + 1) / len(text_chunks))
+        if df_raw.empty:
+            st.error("Kunde inte hämta data från e-Avrop. Kontrollera nätverksanslutningen.")
+        else:
+            raw_text_data = df_raw.to_json(orient="records", force_ascii=False)
+            today_str = datetime.now().strftime("%Y-%m-%d")
             
             prompt = f"""
-            Du är en expert på Business Development och GTM inom Defence & Security (försvar, säkerhet, totalförsvar, civilt försvar och krisberedskap) för ett ledande konsultbolag. 
+            Du är en expert på Business Development och GTM inom Defence & Security samt offentlig sektor på den svenska marknaden. 
             Dagens datum är {today_str}. 
-            Analysera råtexten nedan (del {idx+1} av {len(text_chunks)}).
+            Analyserar följande råa JSON-data över nyligen publicerade upphandlingar från e-Avrop:
+            
+            {raw_text_data}
             
             REGLER FÖR FILTRERING:
             1. **INKLUDERA:** 
-               - Upphandlingar från försvarssektorn (FMV, Försvarsmakten, MSB, Säpo etc.).
-               - Upphandlingar från **kommuner och regioner** som har en direkt koppling till **civilt försvar, totalförsvar, krisberedskap, säkerhetsskydd, informationssäkerhet, robusthet eller skyddsobjekt**.
-            2. **RENSA BORT:** Allmänna, rent civila kommunala upphandlingar som inte berör säkerhet eller beredskap (t.ex. standard HR-stöd för vanliga förvaltningar, skolutbildning, socialtjänst, vanliga IT-system för administration eller lokal fastighetsskötsel/bygg).
+               - Alla upphandlingar inom försvar, totalförsvar, civilt försvar, fmv, msb, säkerhet, krisberedskap, IT-säkerhet, cybersäkerhet och skyddsklassad verksamhet.
+               - Upphandlingar från svenska kommuner och regioner som rör konsulttjänster, digitalisering, ledning/styrning, organisationsutveckling, analys eller säkerhet.
+            2. **RENSA BORT:** Renodlade byggentreprenader, gatuarbeten, lokalvård, skolmåltider, enskilda varuinköp (möbler, kontorsmaterial) eller rena rutinupphandlingar utan konsult-/strategikoppling.
             
-            VIKTIGT OM EXTRAHERING:
-            - **Deadline:** Leta noga efter datum (t.ex. ÅÅÅÅ-MM-DD) eller tidsuttryck (t.ex. "2 days left", "Tomorrow") kopplat till raden och översätt till datumformat om möjligt. Om det står i närheten av upphandlingen, missa det inte!
-            - **Omfattning:** Leta efter summor, timmar, ramavtalsperioder eller värden (t.ex. "100 miljoner SEK", "2 år"). Om inget nämns, skriv "Ej angivet".
-            
-            Returnera resultatet ENDAST som en giltig JSON-lista med relevanta objekt. Inga markdown-backticks kring JSON-svaret (returnera rå JSON som börjar med [ och slutar med ]). Varje objekt ska ha exakt dessa nycklar:
+            Returnera resultatet ENDAST som en giltig JSON-lista. Inga markdown-backticks kring JSON-svaret (börja direkt med [ och sluta med ]). Varje objekt ska ha exakt dessa nycklar:
             - "Myndighet": (Organisation/Köpare)
             - "Upphandling": (Titel på upphandlingen)
-            - "Deadline": (Sista svarsdag, format ÅÅÅÅ-MM-DD om möjligt, annars "Ej angivet")
-            - "Omfattning": (Uppskattad omfattning i timmar, miljonbelopp eller tid om det nämns, annars "Ej angivet")
-            - "Sammanfattning": (En fyllig sammanfattning på 2-3 meningar om vad upphandlingen avser med fokus på säkerhet/försvar/beredskap)
-            - "Saljvinkel": (Konkret rekommendation på hur PA Consulting inom Defence & Security bör positionera sig)
-            - "Källa": (Vilken plattform det kom från)
-
-            Råtext att analysera:
-            {chunk}
+            - "Deadline": (Deadline i formatet ÅÅÅÅ-MM-DD, eller "Ej angivet")
+            - "Omfattning": (Om det framgår, annars "Ej angivet")
+            - "Sammanfattning": (2-3 meningar om vad upphandlingen avser)
+            - "Saljvinkel": (Konkret rekommendation för säljteamet/konsultbolaget)
+            - "Källa": "e-Avrop"
             """
             
             try:
                 response = client.messages.create(
                     model="claude-haiku-4-5-20251001",
-                    max_tokens=4000,
+                    max_tokens=6000,
                     messages=[{"role": "user", "content": prompt}]
                 )
                 
                 raw_output = "".join([block.text for block in response.content if hasattr(block, "text")])
                 
-                if raw_output.strip():
-                    clean_json = raw_output.strip()
-                    if "```json" in clean_json:
-                        clean_json = clean_json.split("```json")[1]
-                    if "```" in clean_json:
-                        clean_json = clean_json.split("```")[0]
-                    clean_json = clean_json.strip()
+                clean_json = raw_output.strip()
+                if "```json" in clean_json:
+                    clean_json = clean_json.split("```json")[1]
+                if "```" in clean_json:
+                    clean_json = clean_json.split("```")[0]
+                clean_json = clean_json.strip()
+                
+                start_idx = clean_json.find("[")
+                end_idx = clean_json.rfind("]")
+                
+                if start_idx != -1 and end_idx != -1:
+                    clean_json = clean_json[start_idx:end_idx+1]
+                    parsed_data = json.loads(clean_json)
+                    st.session_state['parsed_tenders'] = parsed_data
+                    st.success(f"✅ Skrapning av alla sidor klar! Hittade {len(parsed_data)} relevanta uppdrag.")
+                else:
+                    st.warning("AI-analysen gav inga formaterade resultat.")
                     
-                    start_idx = clean_json.find("[")
-                    end_idx = clean_json.rfind("]")
-                    
-                    if start_idx != -1 and end_idx != -1:
-                        clean_json = clean_json[start_idx:end_idx+1]
-                        chunk_data = json.loads(clean_json)
-                        if isinstance(chunk_data, list):
-                            all_parsed_data.extend(chunk_data)
             except Exception as e:
-                continue
-        
-        status_text.empty()
-        progress_bar.empty()
-        
-        if all_parsed_data:
-            st.success(f"✅ Hittade {len(all_parsed_data)} relevanta uppdrag inom Defence, Säkerhet & Civilt försvar!")
-            st.session_state['parsed_tenders'] = all_parsed_data
-        else:
-            st.warning("Hittade inga upphandlingar som matchade kriterierna i den inklistrade texten.")
+                st.error(f"Ett fel uppstod vid AI-bearbetningen: {e}")
 
 if 'parsed_tenders' in st.session_state and st.session_state['parsed_tenders']:
     st.markdown("---")
-    st.subheader("📊 Välj uppdrag för Excel-export")
-    st.write("Bocka i kryssrutan för de uppdrag du vill ta med i Master-Excel:")
-
+    st.subheader("📊 Granska uppdrag & Sätt Go / No-go")
+    
     selected_indices = []
+    go_no_go_status = {}
     
     table_data = []
-    for idx, item in enumerate(st.session_state['parsed_tenders']):
+    for item in st.session_state['parsed_tenders']:
         table_data.append({
             "Myndighet": item.get("Myndighet", ""),
             "Upphandling": item.get("Upphandling", ""),
@@ -178,20 +167,27 @@ if 'parsed_tenders' in st.session_state and st.session_state['parsed_tenders']:
     
     st.dataframe(pd.DataFrame(table_data), use_container_width=True, hide_index=True)
     
-    st.markdown("### 🗂️ Välj vilka som ska exporteras & Läs sammanfattningar")
+    st.markdown("### 🗂️ Detaljerad granskning & Exportval")
     
     for idx, item in enumerate(st.session_state['parsed_tenders']):
         with st.container():
-            col1, col2 = st.columns([0.05, 0.95])
+            col1, col2, col3 = st.columns([0.05, 0.55, 0.40])
             with col1:
                 is_selected = st.checkbox("Välj", key=f"chk_{idx}", label_visibility="collapsed")
                 if is_selected:
                     selected_indices.append(idx)
             with col2:
                 st.markdown(f"**📌 {item.get('Myndighet', '')} – {item.get('Upphandling', '')}**")
-                st.markdown(f"*Deadline:* `{item.get('Deadline', '')}` | *Omfattning:* `{item.get('Omfattning', '')}` | *Källa:* `{item.get('Källa', '')}`")
+                st.markdown(f"*Deadline:* `{item.get('Deadline', '')}` | *Omfattning:* `{item.get('Omfattning', '')}`")
                 st.markdown(f"*Sammanfattning:* {item.get('Sammanfattning', '')}")
                 st.markdown(f"*Säljvinkel:* {item.get('Saljvinkel', '')}")
+            with col3:
+                decision = st.selectbox(
+                    "Go / No-go beslut", 
+                    ["Ej satt", "Go", "No-go"], 
+                    key=f"decision_{idx}"
+                )
+                go_no_go_status[idx] = decision
             st.divider()
 
     rows_for_excel = []
@@ -202,31 +198,26 @@ if 'parsed_tenders' in st.session_state and st.session_state['parsed_tenders']:
             "Upphandling": item.get("Upphandling", ""),
             "Sammanfattning": item.get("Sammanfattning", ""),
             "Säljvinkel": item.get("Saljvinkel", ""),
-            "Go/No-go": "",
-            "Ansvarig konsult för anbudet": "",
-            "Medverkande konsulter": "",
+            "Go/No-go": go_no_go_status.get(idx, "Ej satt"),
+            "Ansvarig konsult": "",
             "Deadline": item.get("Deadline", ""),
-            "Deadline internt": "",
-            "Deadline inlämning": "",
-            "Omfattning (i timmar/pengar)": item.get("Omfattning", ""),
-            "Status (Arbete pågår, inlämnad, avbruten)": "Arbete pågår",
-            "Utfall": "",
-            "Källa": item.get("Källa", "")
+            "Omfattning": item.get("Omfattning", ""),
+            "Status": "Arbete pågår"
         })
     
     if rows_for_excel:
         df_master = pd.DataFrame(rows_for_excel)
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df_master.to_excel(writer, index=False, sheet_name='Upphandlingar')
+            df_master.to_excel(writer, index=False, sheet_name='Utvalda Uppdrag')
         excel_data = output.getvalue()
         
         st.download_button(
             label=f"📥 Ladda ner Master-Excel ({len(rows_for_excel)} markerade uppdrag)",
             data=excel_data,
-            file_name=f"GTM_Defence_CiviltForsvar_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+            file_name=f"Utvalda_Upphandlingar_PA_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             type="primary"
         )
     else:
-        st.info("💡 Bocka i minst ett uppdrag ovan för att aktivera nerladdning av Master-Excel-filen.")
+        st.info("💡 Bocka i minst ett uppdrag ovan för att aktivera nerladdning till Excel.")
