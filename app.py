@@ -8,10 +8,10 @@ import json
 from datetime import datetime
 import io
 
-st.set_page_config(page_title="GTM Upphandlingsbevakning - PA Consulting", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="GTM Upphandlingsbevakning - Multi-Portal", page_icon="🛡️", layout="wide")
 
-st.title("🛡️ PA Consulting GTM-bevakning – Program- & Transformationsledning")
-st.write("Skrapar e-Avrop automatiskt och filtrerar ut affärer som matchar PA:s kärnerbjudande inom management, projektledning, programledning och IT-transformation.")
+st.title("🛡️ PA Consulting GTM-bevakning – Multi-Portal Skrapning")
+st.write("Skrapar automatiskt flera sidor från både e-Avrop och Kommers Annons, och sållar fram tunga management-, program- och transformationsuppdrag.")
 
 api_key = st.secrets.get("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
 
@@ -21,102 +21,122 @@ if not api_key:
 
 client = anthropic.Anthropic(api_key=api_key)
 
-TARGET_URL = "https://www.e-avrop.com/e-Upphandling/Default.aspx"
-
-def scrape_eavrop_all_pages():
+def scrape_eavrop():
     all_tenders = []
     session = requests.Session()
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    }
-
-    def extract_rows(soup_obj):
-        tenders = []
-        for table in soup_obj.find_all('table'):
-            for row in table.find_all('tr'):
-                cols = row.find_all('td')
-                if len(cols) >= 5:
-                    cols_text = [col.text.strip() for col in cols]
-                    title = cols_text[0]
-                    
-                    if title and "Logga in" not in title and "Bevaka" not in title:
-                        if title.isdigit() or (len(cols_text) > 1 and all(c.isdigit() for c in cols_text if c)):
-                            continue
-                            
-                        tenders.append({
-                            "Titel": title,
-                            "Publicerad": cols_text[1],
-                            "Organisation": cols_text[2],
-                            "Kontext": cols_text[3],
-                            "Deadline": cols_text[4]
-                        })
-        return tenders
-
-    page = 1
-    max_pages = 40
-    progress_text = st.empty()
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
     
-    while page <= max_pages:
-        progress_text.text(f"Skrapar e-Avrop sida {page}...")
-        page_url = TARGET_URL if page == 1 else f"{TARGET_URL}?page={page}"
-        
+    page = 1
+    while page <= 25: # Säkerhetsgräns per källa
+        url = "https://www.e-avrop.com/e-Upphandling/Default.aspx" if page == 1 else f"https://www.e-avrop.com/e-Upphandling/Default.aspx?page={page}"
         try:
-            res = session.get(page_url, headers=headers, timeout=10)
+            res = session.get(url, headers=headers, timeout=10)
             if res.status_code != 200:
                 break
-                
             soup = BeautifulSoup(res.text, 'html.parser')
-            rows = extract_rows(soup)
-            if not rows:
+            rows_found = 0
+            for table in soup.find_all('table'):
+                for row in table.find_all('tr'):
+                    cols = row.find_all('td')
+                    if len(cols) >= 5:
+                        cols_text = [col.text.strip() for col in cols]
+                        title = cols_text[0]
+                        if title and "Logga in" not in title and "Bevaka" not in title:
+                            if title.isdigit() or all(c.isdigit() for c in cols_text if c):
+                                continue
+                            all_tenders.append({
+                                "Källa": "e-Avrop",
+                                "Titel": title,
+                                "Publicerad": cols_text[1],
+                                "Organisation": cols_text[2],
+                                "Deadline": cols_text[4]
+                            })
+                            rows_found += 1
+            if rows_found == 0:
                 break
-                
-            all_tenders.extend(rows)
             page += 1
-        except Exception as e:
+        except Exception:
             break
-            
-    progress_text.empty()
-    df = pd.DataFrame(all_tenders).drop_duplicates()
-    if not df.empty:
-        df = df[~df['Titel'].astype(str).str.match(r'^\d+$')]
-    return df
+    return all_tenders
 
-if st.button("🚀 Starta automatisk skanning & PA-filtrering", type="primary", use_container_width=True):
-    with st.spinner("Skrapar e-Avrop och filtrerar ut management- och transformationsuppdrag med Claude 3.5 Haiku..."):
-        df_raw = scrape_eavrop_all_pages()
+def scrape_kommers():
+    all_tenders = []
+    session = requests.Session()
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+    
+    # Exempel på publika listan i Kommers eLite
+    base_url = "https://www.kommersannons.se/eLite/Notice/NoticeList.aspx"
+    
+    page = 1
+    while page <= 15:
+        url = base_url if page == 1 else f"{base_url}?page={page}"
+        try:
+            res = session.get(url, headers=headers, timeout=10)
+            if res.status_code != 200:
+                break
+            soup = BeautifulSoup(res.text, 'html.parser')
+            rows_found = 0
+            
+            # Letar efter tabellrader som innehåller upphandlingar i Kommers struktur
+            for row in soup.find_all('tr'):
+                cols = row.find_all('td')
+                if len(cols) >= 3:
+                    text_data = [c.text.strip() for c in cols if c.text.strip()]
+                    if text_data:
+                        all_tenders.append({
+                            "Källa": "Kommers Annons",
+                            "Titel": text_data[0] if len(text_data) > 0 else "Ej angivet",
+                            "Publicerad": "",
+                            "Organisation": "",
+                            "Deadline": text_data[-1] if len(text_data) > 1 else "Ej angivet"
+                        })
+                        rows_found += 1
+            if rows_found == 0:
+                break
+            page += 1
+        except Exception:
+            break
+    return all_tenders
+
+if st.button("🚀 Starta automatisk multi-portal skanning", type="primary", use_container_width=True):
+    with st.spinner("Skrapar e-Avrop och Kommers Annons över flera sidor..."):
+        tenders_eavrop = scrape_eavrop()
+        tenders_kommers = scrape_kommers()
+        
+        combined_data = tenders_eavrop + tenders_kommers
+        df_raw = pd.DataFrame(combined_data).drop_duplicates(subset=["Titel"])
         
         if df_raw.empty:
-            st.error("Kunde inte hämta data från e-Avrop. Kontrollera nätverksanslutningen.")
+            st.error("Kunde inte hämta data från portarna automatiskt. Kontrollera nätverksanslutningen.")
         else:
             raw_text_data = df_raw.to_json(orient="records", force_ascii=False)
             today_str = datetime.now().strftime("%Y-%m-%d")
             
             prompt = f"""
-            Du är en expert på Business Development och Go-To-Market (GTM) för **PA Consulting** inom Defence & Security samt offentlig sektor i Sverige. 
+            Du är en expert på Business Development och GTM för **PA Consulting** inom Defence & Security samt offentlig sektor i Sverige. 
             Dagens datum är {today_str}. 
-            Analyserar följande råa JSON-data över nyligen publicerade upphandlingar från e-Avrop:
+            Analyserar följande råa JSON-data över nyligen publicerade upphandlingar från svenska portaler:
             
             {raw_text_data}
             
             PA CONSULTINGS KÄRNERBJUDANDE (DETTA SKA MED):
             - **Managementkonsulttjänster, strategisk rådgivning och verksamhetsutveckling.**
-            - **Projektledning, programledning, portföljstyrning och transformationsledning** (särskilt inom stora IT-förändringar, digitalisering eller samhällskritiska system).
-            - **Försvar, civilt försvar, krisberedskap, säkerhet och myndighetsstyrning** där det efterfrågas ledning, analys, utredning eller expertstöd.
-            - **IT-strategi, arkitekturstyrning och digitaliseringsledning** (ej handgriplig kodning/utveckling, utan styrning och ledarskap).
+            - **Projektledning, programledning, portföljstyrning och transformationsledning** (särskilt stora IT-förändringar, digitalisering eller samhällskritiska system).
+            - **Försvar, civilt försvar, krisberedskap, säkerhet och myndighetsstyrning** med fokus på ledning, analys, utredning eller expertstöd.
+            - **IT-strategi, arkitekturstyrning och digitaliseringsledning** (ej handgriplig kodning).
             
             STRICT NEGATIVE FILTERS (RENSA BORT OMEDELBART):
             - Byggentreprenader, mark, anläggning, gatuarbeten och fysiska fastighetsåtgärder.
-            - Rena personalkonsultinnehyrningar utan ledningsansvar (t.ex. vanliga systemutvecklare per timme, enskilda administratörer, lokalvård, städ, livsmedel, skolmaterial).
-            - Rena ramavtal för mjukvarulicenser eller hårdvara utan konsultstöd.
+            - Rena personalkonsultinnehyrningar utan ledningsansvar (t.ex. vanliga systemutvecklare per timme, enskilda administratörer, städ, livsmedel, skolmaterial).
             
             Returnera resultatet ENDAST som en giltig JSON-lista. Inga markdown-backticks kring JSON-svaret (börja direkt med [ och sluta med ]). Varje objekt ska ha exakt dessa nycklar:
-            - "Myndighet": (Organisation/Köpare)
+            - "Myndighet": (Organisation/Köpare om det finns, annars "Ej angivet")
             - "Upphandling": (Titel på upphandlingen)
             - "Deadline": (Deadline i formatet ÅÅÅÅ-MM-DD, eller "Ej angivet")
             - "Omfattning": (Om det framgår, annars "Ej angivet")
-            - "Sammanfattning": (2-3 meningar om varför detta är ett klockrent uppdrag för PA:s management- eller programledare)
-            - "Saljvinkel": (Konkret rekommendation för PA-teamet kring hur vi positionerar oss i anbudet)
-            - "Källa": "e-Avrop"
+            - "Sammanfattning": (2-3 meningar om varför detta passar PA:s management- eller programledare)
+            - "Saljvinkel": (Konkret rekommendation för PA-teamet)
+            - "Källa": (Ange källan från datan, t.ex. "e-Avrop" eller "Kommers Annons")
             """
             
             try:
@@ -142,7 +162,7 @@ if st.button("🚀 Starta automatisk skanning & PA-filtrering", type="primary", 
                     clean_json = clean_json[start_idx:end_idx+1]
                     parsed_data = json.loads(clean_json)
                     st.session_state['parsed_tenders'] = parsed_data
-                    st.success(f"✅ Filtrering klar! Hittade {len(parsed_data)} högpotenta management- och programledningsuppdrag.")
+                    st.success(f"✅ Skrapning klar! Hittade {len(parsed_data)} högpotenta management- och programledningsuppdrag.")
                 else:
                     st.warning("AI-analysen gav inga formaterade resultat.")
                     
@@ -159,11 +179,11 @@ if 'parsed_tenders' in st.session_state and st.session_state['parsed_tenders']:
     table_data = []
     for item in st.session_state['parsed_tenders']:
         table_data.append({
+            "Källa": item.get("Källa", ""),
             "Myndighet": item.get("Myndighet", ""),
             "Upphandling": item.get("Upphandling", ""),
             "Deadline": item.get("Deadline", ""),
-            "Omfattning": item.get("Omfattning", ""),
-            "Källa": item.get("Källa", "")
+            "Omfattning": item.get("Omfattning", "")
         })
     
     st.dataframe(pd.DataFrame(table_data), use_container_width=True, hide_index=True)
@@ -178,7 +198,7 @@ if 'parsed_tenders' in st.session_state and st.session_state['parsed_tenders']:
                 if is_selected:
                     selected_indices.append(idx)
             with col2:
-                st.markdown(f"**📌 {item.get('Myndighet', '')} – {item.get('Upphandling', '')}**")
+                st.markdown(f"**📌 [{item.get('Källa', '')}] {item.get('Myndighet', '')} – {item.get('Upphandling', '')}**")
                 st.markdown(f"*Deadline:* `{item.get('Deadline', '')}` | *Omfattning:* `{item.get('Omfattning', '')}`")
                 st.markdown(f"*Sammanfattning:* {item.get('Sammanfattning', '')}")
                 st.markdown(f"*Säljvinkel:* {item.get('Saljvinkel', '')}")
@@ -195,6 +215,7 @@ if 'parsed_tenders' in st.session_state and st.session_state['parsed_tenders']:
     for idx in selected_indices:
         item = st.session_state['parsed_tenders'][idx]
         rows_for_excel.append({
+            "Källa": item.get("Källa", ""),
             "Myndighet": item.get("Myndighet", ""),
             "Upphandling": item.get("Upphandling", ""),
             "Sammanfattning": item.get("Sammanfattning", ""),
