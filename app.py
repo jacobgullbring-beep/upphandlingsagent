@@ -8,10 +8,10 @@ import json
 from datetime import datetime
 import io
 
-st.set_page_config(page_title="GTM Upphandlingsbevakning - Automatiskt", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="GTM Upphandlingsbevakning - PA Consulting", page_icon="🛡️", layout="wide")
 
-st.title("🛡️ Automatiskt GTM-bevakning – Försvar, Säkerhet & Offentlig Sektor")
-st.write("Skrapar samtliga sidor på e-Avrop automatiskt tills inga fler sidor finns kvar, och filtrerar ut relevanta affärer med hjälp av Claude 3.5 Haiku.")
+st.title("🛡️ PA Consulting GTM-bevakning – Program- & Transformationsledning")
+st.write("Skrapar e-Avrop automatiskt och filtrerar ut affärer som matchar PA:s kärnerbjudande inom management, projektledning, programledning och IT-transformation.")
 
 api_key = st.secrets.get("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
 
@@ -53,8 +53,7 @@ def scrape_eavrop_all_pages():
         return tenders
 
     page = 1
-    max_pages = 40  # Säkerhetsgräns för att undvika oändlig loop
-    
+    max_pages = 40
     progress_text = st.empty()
     
     while page <= max_pages:
@@ -68,12 +67,9 @@ def scrape_eavrop_all_pages():
                 
             soup = BeautifulSoup(res.text, 'html.parser')
             rows = extract_rows(soup)
-            
-            # Om inga rader hittas eller om sidan är tom/slut på data
             if not rows:
                 break
                 
-            # Kontrollera om vi fått samma data igen (om paginering loopar)
             all_tenders.extend(rows)
             page += 1
         except Exception as e:
@@ -85,8 +81,8 @@ def scrape_eavrop_all_pages():
         df = df[~df['Titel'].astype(str).str.match(r'^\d+$')]
     return df
 
-if st.button("🚀 Starta helautomatisk skanning av ALLA sidor", type="primary", use_container_width=True):
-    with st.spinner("Skrapar samtliga sidor från e-Avrop och analyserar med Claude 3.5 Haiku..."):
+if st.button("🚀 Starta automatisk skanning & PA-filtrering", type="primary", use_container_width=True):
+    with st.spinner("Skrapar e-Avrop och filtrerar ut management- och transformationsuppdrag med Claude 3.5 Haiku..."):
         df_raw = scrape_eavrop_all_pages()
         
         if df_raw.empty:
@@ -96,25 +92,30 @@ if st.button("🚀 Starta helautomatisk skanning av ALLA sidor", type="primary",
             today_str = datetime.now().strftime("%Y-%m-%d")
             
             prompt = f"""
-            Du är en expert på Business Development och GTM inom Defence & Security samt offentlig sektor på den svenska marknaden. 
+            Du är en expert på Business Development och Go-To-Market (GTM) för **PA Consulting** inom Defence & Security samt offentlig sektor i Sverige. 
             Dagens datum är {today_str}. 
             Analyserar följande råa JSON-data över nyligen publicerade upphandlingar från e-Avrop:
             
             {raw_text_data}
             
-            REGLER FÖR FILTRERING:
-            1. **INKLUDERA:** 
-               - Alla upphandlingar inom försvar, totalförsvar, civilt försvar, fmv, msb, säkerhet, krisberedskap, IT-säkerhet, cybersäkerhet och skyddsklassad verksamhet.
-               - Upphandlingar från svenska kommuner och regioner som rör konsulttjänster, digitalisering, ledning/styrning, organisationsutveckling, analys eller säkerhet.
-            2. **RENSA BORT:** Renodlade byggentreprenader, gatuarbeten, lokalvård, skolmåltider, enskilda varuinköp (möbler, kontorsmaterial) eller rena rutinupphandlingar utan konsult-/strategikoppling.
+            PA CONSULTINGS KÄRNERBJUDANDE (DETTA SKA MED):
+            - **Managementkonsulttjänster, strategisk rådgivning och verksamhetsutveckling.**
+            - **Projektledning, programledning, portföljstyrning och transformationsledning** (särskilt inom stora IT-förändringar, digitalisering eller samhällskritiska system).
+            - **Försvar, civilt försvar, krisberedskap, säkerhet och myndighetsstyrning** där det efterfrågas ledning, analys, utredning eller expertstöd.
+            - **IT-strategi, arkitekturstyrning och digitaliseringsledning** (ej handgriplig kodning/utveckling, utan styrning och ledarskap).
+            
+            STRICT NEGATIVE FILTERS (RENSA BORT OMEDELBART):
+            - Byggentreprenader, mark, anläggning, gatuarbeten och fysiska fastighetsåtgärder.
+            - Rena personalkonsultinnehyrningar utan ledningsansvar (t.ex. vanliga systemutvecklare per timme, enskilda administratörer, lokalvård, städ, livsmedel, skolmaterial).
+            - Rena ramavtal för mjukvarulicenser eller hårdvara utan konsultstöd.
             
             Returnera resultatet ENDAST som en giltig JSON-lista. Inga markdown-backticks kring JSON-svaret (börja direkt med [ och sluta med ]). Varje objekt ska ha exakt dessa nycklar:
             - "Myndighet": (Organisation/Köpare)
             - "Upphandling": (Titel på upphandlingen)
             - "Deadline": (Deadline i formatet ÅÅÅÅ-MM-DD, eller "Ej angivet")
             - "Omfattning": (Om det framgår, annars "Ej angivet")
-            - "Sammanfattning": (2-3 meningar om vad upphandlingen avser)
-            - "Saljvinkel": (Konkret rekommendation för säljteamet/konsultbolaget)
+            - "Sammanfattning": (2-3 meningar om varför detta är ett klockrent uppdrag för PA:s management- eller programledare)
+            - "Saljvinkel": (Konkret rekommendation för PA-teamet kring hur vi positionerar oss i anbudet)
             - "Källa": "e-Avrop"
             """
             
@@ -141,7 +142,7 @@ if st.button("🚀 Starta helautomatisk skanning av ALLA sidor", type="primary",
                     clean_json = clean_json[start_idx:end_idx+1]
                     parsed_data = json.loads(clean_json)
                     st.session_state['parsed_tenders'] = parsed_data
-                    st.success(f"✅ Skrapning av alla sidor klar! Hittade {len(parsed_data)} relevanta uppdrag.")
+                    st.success(f"✅ Filtrering klar! Hittade {len(parsed_data)} högpotenta management- och programledningsuppdrag.")
                 else:
                     st.warning("AI-analysen gav inga formaterade resultat.")
                     
@@ -215,7 +216,7 @@ if 'parsed_tenders' in st.session_state and st.session_state['parsed_tenders']:
         st.download_button(
             label=f"📥 Ladda ner Master-Excel ({len(rows_for_excel)} markerade uppdrag)",
             data=excel_data,
-            file_name=f"Utvalda_Upphandlingar_PA_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+            file_name=f"PA_Consulting_Upphandlingar_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             type="primary"
         )
