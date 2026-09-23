@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import anthropic
 import os
+from io import BytesIO
 
 st.set_page_config(
     page_title="PA D&S Radar",
@@ -79,19 +80,17 @@ if uploaded_file:
                     ]
                 )
 
-                svar = response.content[0].text
+                ai_result = response.content[0].text
 
             except Exception as e:
 
-                svar = str(e)
+                ai_result = str(e)
 
-            resultat.append(
-                {
-                    "Organisation": organisation,
-                    "Titel": title,
-                    "AI Result": svar
-                }
-            )
+            resultat.append({
+                "Organisation": organisation,
+                "Titel": title,
+                "AI Result": ai_result
+            })
 
             progress.progress((i + 1) / len(rows))
 
@@ -100,3 +99,25 @@ if uploaded_file:
         st.subheader("🎯 Resultat")
 
         st.dataframe(result_df)
+
+        # Excel-export
+
+        output = BytesIO()
+
+        with pd.ExcelWriter(
+            output,
+            engine="openpyxl"
+        ) as writer:
+
+            result_df.to_excel(
+                writer,
+                index=False,
+                sheet_name="Resultat"
+            )
+
+        st.download_button(
+            label="📥 Ladda ner Excel",
+            data=output.getvalue(),
+            file_name="PA_DS_Resultat.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
