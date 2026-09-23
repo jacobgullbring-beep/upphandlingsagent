@@ -2,20 +2,15 @@ import streamlit as st
 import pandas as pd
 import anthropic
 import os
-from io import BytesIO
 
 st.set_page_config(
     page_title="PA Defence & Security Opportunity Radar",
-    page_icon="🛡️",
-    layout="wide"
+    page_icon="🛡️"
 )
 
 st.title("🛡️ PA Defence & Security Opportunity Radar")
 
-# =====================================
-# CLAUDE
-# =====================================
-
+# Claude
 try:
     api_key = st.secrets["ANTHROPIC_API_KEY"]
 except:
@@ -29,10 +24,7 @@ client = anthropic.Anthropic(api_key=api_key)
 
 st.success("✅ Claude ansluten")
 
-# =====================================
 # CSV
-# =====================================
-
 uploaded_file = st.file_uploader(
     "Ladda upp CSV",
     type=["csv"]
@@ -46,25 +38,43 @@ if uploaded_file:
 
     st.dataframe(df)
 
-    antal = st.slider(
-        "Antal upphandlingar",
-        1,
-        min(len(df), 20),
-        min(len(df), 10)
-    )
+    if st.button("🚀 Testa första upphandlingen"):
 
-    if st.button("🚀 Analysera"):
+        row = df.iloc[0]
 
-        resultat = []
+        organisation = str(row["Organisation"])
+        title = str(row["Title"])
+        description = str(row["Description"])
 
-        progress = st.progress(0)
+        prompt = (
+            "Du arbetar för PA Consulting Defence & Security.\n\n"
+            "Bedöm om PA kan sälja management consulting här.\n\n"
+            f"Organisation: {organisation}\n"
+            f"Titel: {title}\n"
+            f"Beskrivning: {description}\n\n"
+            "Svara kort med:\n"
+            "SCORE: X av 10\n"
+            "KATEGORI: ...\n"
+            "MOTIVERING: ..."
+        )
 
-        rows = df.head(antal)
+        with st.spinner("⏳ Skickar till Claude..."):
 
-        for i, row in rows.iterrows():
+            try:
 
-            organisation = str(row["Organisation"])
-            title = str(row["Title"])
-            description = str(row["Description"])
-            value = str(row["Value"])
-        
+                response = client.messages.create(
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=300,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ]
+                )
+
+                st.success("✅ Svar mottaget")
+
+                st.write(response.content[0].text)
+
+            except Exception
