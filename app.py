@@ -5,15 +5,21 @@ import os
 import re
 from io import BytesIO
 
+# =====================================
+# SETUP
+# =====================================
+
 st.set_page_config(
-    page_title="PA D&S Radar",
+    page_title="PA D&S Opportunity Radar",
     page_icon="🛡️",
     layout="wide"
 )
 
 st.title("🛡️ PA Defence & Security Opportunity Radar")
 
-# Claude
+# =====================================
+# CLAUDE
+# =====================================
 
 try:
     api_key = st.secrets["ANTHROPIC_API_KEY"]
@@ -28,14 +34,16 @@ client = anthropic.Anthropic(api_key=api_key)
 
 st.success("✅ Claude ansluten")
 
+# =====================================
 # CSV
+# =====================================
 
 uploaded_file = st.file_uploader(
     "Ladda upp CSV",
     type=["csv"]
 )
 
-if uploaded_file:
+if uploaded_file is not None:
 
     df = pd.read_csv(uploaded_file)
 
@@ -54,9 +62,9 @@ if uploaded_file:
 
         resultat = []
 
-        rows = df.head(antal)
-
         progress = st.progress(0)
+
+        rows = df.head(antal)
 
         for i, row in rows.iterrows():
 
@@ -69,7 +77,12 @@ if uploaded_file:
             prompt = (
                 "Du arbetar för PA Consulting Defence & Security.\n\n"
                 "Bedöm om PA kan sälja management consulting här.\n\n"
-                "Ge hög relevans för:\n"
+                "Returnera EXAKT enligt detta format:\n\n"
+                "SCORE: X\n"
+                "CATEGORY: ...\n"
+                "SUMMARY: ...\n"
+                "REASON: ...\n\n"
+                "Ge hög score för:\n"
                 "- PMO\n"
                 "- Programledning\n"
                 "- Transformation\n"
@@ -84,18 +97,15 @@ if uploaded_file:
                 "- Verksamhetsutveckling\n\n"
                 f"Organisation: {organisation}\n"
                 f"Titel: {title}\n"
-                f"Beskrivning: {description}\n\n"
-                "Svara exakt så här:\n"
-                "SCORE: X av 10\n"
-                "KATEGORI: ...\n"
-                "MOTIVERING: ..."
+                f"Beskrivning: {description}\n"
+                f"Värde: {value}\n"
             )
 
             try:
 
                 response = client.messages.create(
                     model="claude-haiku-4-5-20251001",
-                    max_tokens=250,
+                    max_tokens=300,
                     messages=[
                         {
                             "role": "user",
@@ -110,16 +120,47 @@ if uploaded_file:
 
                 ai_result = str(e)
 
-            score = 0
+            # ==========================
+            # Extrahera fält
+            # ==========================
 
-            match = re.search(
+            score = 0
+            category = ""
+            summary = ""
+            reason = ""
+
+            score_match = re.search(
                 r"SCORE:\s*(\d+)",
                 ai_result,
                 re.IGNORECASE
             )
 
-            if match:
-                score = int(match.group(1))
+            if score_match:
+                score = int(score_match.group(1))
+
+            for line in ai_result.splitlines():
+
+                if line.upper().startswith("CATEGORY:"):
+                    category = line.replace(
+                        "CATEGORY:",
+                        ""
+                    ).strip()
+
+                elif line.upper().startswith("SUMMARY:"):
+                    summary = line.replace(
+                        "SUMMARY:",
+                        ""
+                    ).strip()
+
+                elif line.upper().startswith("REASON:"):
+                    reason = line.replace(
+                        "REASON:",
+                        ""
+                    ).strip()
+
+            # ==========================
+            # Prioritet
+            # ==========================
 
             if score >= 9:
                 priority = "🔥 Pursue"
@@ -139,13 +180,17 @@ if uploaded_file:
                     "Priority": priority,
                     "Organisation": organisation,
                     "Title": title,
+                    "Category": category,
+                    "Summary": summary,
+                    "Reason": reason,
                     "Value": value,
-                    "Link": link,
-                    "AI Result": ai_result
+                    "Link": link
                 }
             )
 
-            progress.progress((i + 1) / len(rows))
+            progress.progress(
+                (i + 1) / len(rows)
+            )
 
         result_df = pd.DataFrame(resultat)
 
@@ -154,39 +199,59 @@ if uploaded_file:
             ascending=False
         )
 
+        # ==========================
         # Dashboard
-
-        pursue_count = len(
-            result_df[result_df["Priority"] == "🔥 Pursue"]
-        )
-
-        review_count = len(
-            result_df[result_df["Priority"] == "🟢 Review"]
-        )
-
-        ignore_count = len(
-            result_df[result_df["Priority"] == "🔴 Ignore"]
-        )
+        # ==========================
 
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            st.metric("🔥 Pursue", pursue_count)
+
+            st.metric(
+                "🔥 Pursue",
+                len(
+                    result_df[
+                        result_df["Priority"] == "🔥 Pursue"
+                    ]
+                )
+            )
 
         with col2:
-            st.metric("🟢 Review", review_count)
+
+            st.metric(
+                "🟢 Review",
+                len(
+                    result_df[
+                        result_df["Priority"] == "🟢 Review"
+                    ]
+                )
+            )
 
         with col3:
-            st.metric("🔴 Ignore", ignore_count)
 
-        st.subheader("🎯 Möjligheter")
+            st.metric(
+                "🔴 Ignore",
+                len(
+                    result_df[
+                        result_df["Priority"] == "🔴 Ignore"
+                    ]
+                )
+            )
+
+        # ==========================
+        # Resultat
+        # ==========================
+
+        st.subheader("🎯 D&S Opportunity Radar")
 
         st.dataframe(
             result_df,
             use_container_width=True
         )
 
-        # Excel export
+        # ==========================
+        # Excel Export
+        # ==========================
 
         output = BytesIO()
 
