@@ -1,52 +1,34 @@
 import streamlit as st
-from playwright.sync_api import sync_playwright
 
 st.set_page_config(
-    page_title="Mercell Test",
-    page_icon="🛡️"
+    page_title="PA D&S Radar",
+    page_icon="🛡️",
+    layout="wide"
 )
 
-st.title("🛡️ Mercell Browser Test")
+st.title("🛡️ PA Defence & Security Opportunity Radar")
 
-URL = st.text_input(
-    "Mercell URL",
-    value="https://app.mercell.com/org/goteborgs_stads_upphandlingar"
-)
+st.markdown("""
+### Mål V1
 
-if st.button("TEST PLAYWRIGHT"):
+Vi testar just nu bara:
 
-    try:
+- Kan Streamlit starta?
+- Kan Playwright starta?
+- Kan vi sedan läsa Mercell?
 
-        with sync_playwright() as p:
+Inga AI-funktioner ännu.
+""")
 
-            browser = p.chromium.launch(
-                headless=True
-            )
+st.success("✅ Streamlit fungerar")
 
-            page = browser.new_page()
+st.write("Nästa steg är att få Playwright/Chromium installerat.")
 
-            page.goto(
-                URL,
-                wait_until="networkidle",
-                timeout=60000
-            )
+st.code("""
+När Playwright fungerar kommer nästa version att:
 
-            html = page.content()
-
-            browser.close()
-
-        st.success("Sidan hämtad")
-
-        st.write("Antal tecken")
-
-        st.write(len(html))
-
-        st.text_area(
-            "HTML",
-            html[:10000],
-            height=500
-        )
-
-    except Exception as e:
-
-        st.exception(e)
+1. Öppna Göteborgs Mercell-sida
+2. Hämta alla /tender/... länkar
+3. Visa dem i tabell
+4. Därefter lägger vi på Claude-score
+""")
