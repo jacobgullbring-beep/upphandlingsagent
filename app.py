@@ -2,32 +2,43 @@ import streamlit as st
 import pandas as pd
 import anthropic
 import requests
-import json
 import os
+import json
 
 st.set_page_config(
-    page_title="PA D&S Opportunity Radar",
+    page_title="PA D&S Radar",
     page_icon="🛡️",
     layout="wide"
 )
 
 st.title("🛡️ PA Defence & Security Opportunity Radar")
 
-MERCELL_ORGS = {
+# =========================
+# KÄLLOR
+# =========================
+
+MERCELL_SOURCES = {
     "Göteborg":
         "https://app.mercell.com/org/goteborgs_stads_upphandlingar",
 
-    "Lund":
-        "https://app.mercell.com/org/lunds_kommuns_upphandlingar",
-
     "Haninge":
         "https://app.mercell.com/org/haninge_kommun",
+
+    "Lund":
+        "https://app.mercell.com/org/lunds_kommuns_upphandlingar",
 
     "Jönköping":
         "https://app.mercell.com/org/jonkopings_kommun"
 }
 
-api_key = os.getenv("ANTHROPIC_API_KEY")
+# =========================
+# ANTHROPIC
+# =========================
+
+try:
+    api_key = st.secrets["ANTHROPIC_API_KEY"]
+except:
+    api_key = os.getenv("ANTHROPIC_API_KEY")
 
 if not api_key:
     st.error("ANTHROPIC_API_KEY saknas")
@@ -37,40 +48,42 @@ client = anthropic.Anthropic(
     api_key=api_key
 )
 
-def get_pages(base_url, max_pages):
+# =========================
+# HJÄLPFUNKTIONER
+# =========================
+
+def generate_pages(base_url, max_pages):
 
     urls = []
 
-    for p in range(1, max_pages + 1):
+    for page in range(1, max_pages + 1):
 
-        if p == 1:
+        if page == 1:
             urls.append(base_url)
-
         else:
-            urls.append(
-                f"{base_url}?page={p}"
-            )
+            urls.append(f"{base_url}?page={page}")
 
     return urls
+
 
 def fetch_page(url):
 
     try:
 
-        r = requests.get(
+        response = requests.get(
             url,
-            timeout=15,
             headers={
-                "User-Agent":
-                "Mozilla/5.0"
-            }
+                "User-Agent": "Mozilla/5.0"
+            },
+            timeout=20
         )
 
-        return r.text
+        return response.text
 
-    except Exception:
+    except Exception as e:
 
-        return ""
+        return f"ERROR: {str(e)}"
+
 
 def analyse_with_claude(text):
 
@@ -79,26 +92,28 @@ Du arbetar för PA Consulting Defence & Security.
 
 Analysera innehållet.
 
-Identifiera:
+Identifiera om texten innehåller:
 
-1. Upphandlingar
-2. Programledning
-3. PMO
-4. Transformation
-5. Beredskap
-6. Säkerhet
-7. Management Consulting
+- Programledning
+- PMO
+- Transformation
+- Förändringsledning
+- Beredskap
+- Säkerhet
+- Management Consulting
 
-Returnera JSON:
+Returnera ENDAST giltig JSON.
+
+Format:
 
 [
- {{
-   "title":"",
-   "organisation":"",
-   "score":0,
-   "category":"",
-   "reason":""
- }}
+  {{
+    "organisation": "",
+    "title": "",
+    "score": 0,
+    "category": "",
+    "reason": ""
+  }}
 ]
 
 Text:
@@ -106,75 +121,100 @@ Text:
 {text}
 """
 
-    msg = client.messages.create(
-        model="model="claude-haiku-4-5-20251001",
-        max_tokens=4000,
-        messages=[
-            {
-                "role":"user",
-                "content":prompt
-            }
-        ]
-    )
+    try:
 
-    return msg.content[0].text
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=3000,
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        )
+
+        return response.content[0].text
+
+    except Exception as e:
+
+        st.error("Claude fel")
+
+        st.exception(e)
+
+        return "[]"
+
+
+# =========================
+# UI
+# =========================
 
 col1, col2 = st.columns(2)
 
 with col1:
 
     max_pages = st.slider(
-        "Antal sidor att läsa",
+        "Antal sidor",
         1,
-        20,
-        5
+        10,
+        3
     )
 
 with col2:
 
-    selected_orgs = st.multiselect(
+    selected_sources = st.multiselect(
         "Kommuner",
-        list(MERCELL_ORGS.keys()),
-        default=list(MERCELL_ORGS.keys())
+        list(MERCELL_SOURCES.keys()),
+        default=["Göteborg"]
     )
 
 if st.button("🚀 Scan Opportunities"):
 
-    raw_text = ""
+    all_text = ""
 
     progress = st.progress(0)
 
-    total = len(selected_orgs)
+    total = len(selected_sources)
 
-    counter = 0
+    current = 0
 
-    for org in selected_orgs:
+    for source in selected_sources:
 
-        base_url = MERCELL_ORGS[org]
+        base_url = MERCELL_SOURCES[source]
 
-        pages = get_pages(
+        urls = generate_pages(
             base_url,
-            max_pages=max_pages
+            max_pages
         )
 
-        for page in pages:
+        for url in urls:
 
-            html = fetch_page(page)
+            page_text = fetch_page(url)
 
-            raw_text += html[:20000]
+            all_text += page_text[:10000]
 
-        counter += 1
+        current += 1
 
-        progress.progress(counter / total)
+        progress.progress(current / total)
 
     st.success("Insamling klar")
 
-    with st.spinner("Claude analyserar..."):
+    st.subheader("Debug")
 
-        result = analyse_with_claude(
-            raw_text[:150000]
+    st.write(
+        f"Totalt antal tecken hämtade: {len(all_text)}"
+    )
+
+    st.text_area(
+        "Förhandsvisning",
+        all_text[:5000],
+        height=250
+    )
+
+    if len(all_text) < 500:
+
+        st.warning(
+            "Mercell returnerade nästan ingen data. Då måste vi använda Playwright."
         )
 
-    st.subheader("Claude Resultat")
-
-    st.code(result)
+    with st.spinner("Claude analyserar...")
