@@ -168,25 +168,28 @@ with tab_files:
                         st.session_state['parsed_tenders'] = all_parsed_data
                         st.success(f"✅ Analys klar! Hittade {len(all_parsed_data)} relevanta management-uppdrag.")
                     else:
-                        st.warning("Hittade inga matchande management-upphandlingar i filerna (bygg, el, VA m.m. har rensats bort).")
+                        st.warning("Hittade inga matchande management-upphandlingar i filerna.")
 
-# --- FLIK 2: SCANNA ALLT (VUNNET SIDOR + LÄNKAR) ---
+# --- FLIK 2: SCANNA ALLT (VUNNET SIDOR + PORTALER MED SIDNUMRERING) ---
 with tab_scan:
     st.subheader("🌐 Automatisk skrapning och genomgång av Vunnet.se & alla direktlänkar")
-    st.write("Med ett enda klick skannas det valda antalet sidor på Vunnet.se samt samtliga lagrade direktlänkar i sidomenyn, strikt filtrerat för Management inom Defence & Security.")
+    st.write("Välj antal sidor att loopa igenom både för Vunnet.se och de portaler (t.ex. Mercell) som stöder sidnumrering.")
     
-    col_v1, col_v2 = st.columns(2)
+    col_v1, col_v2, col_v3 = st.columns(3)
     with col_v1:
         start_page = st.number_input("Starta från Vunnet-sida", min_value=1, value=1, step=1)
     with col_v2:
-        max_pages = st.number_input("Antal sidor att loopa igenom på Vunnet.se", min_value=1, max_value=162, value=3, step=1, help="Max 162 sidor finns tillgängliga på Vunnet.se")
+        max_pages = st.number_input("Antal sidor på Vunnet.se", min_value=1, max_value=162, value=3, step=1)
+    with col_v3:
+        max_portal_pages = st.number_input("Antal sidor per portal (t.ex. Mercell)", min_value=1, max_value=5, value=2, step=1, help="Loopar igenom så här många sidor på portaler som stöder ?page=X")
     
-    if st.button("🚀 Starta strikt helhetskanning (Management + Försvar)", type="primary", key="btn_scan_all"):
+    if st.button("🚀 Starta strikt helhetskanning (med sid-loopar)", type="primary", key="btn_scan_all"):
         master_parsed_data = []
         today_str = datetime.now().strftime("%Y-%m-%d")
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
         
-        total_steps = max_pages + len(all_sidebar_links)
+        # Beräkna totala steg för progress bar
+        total_steps = max_pages + (len(all_sidebar_links) * max_portal_pages)
         current_step = 0
         
         progress_bar = st.progress(0)
@@ -198,7 +201,7 @@ with tab_scan:
             current_step += 1
             progress_pct = current_step / total_steps
             progress_bar.progress(min(progress_pct, 1.0))
-            status_text.text(f"Skrapar Vunnet.se sida {current_page} (strikt management-filter)...")
+            status_text.text(f"Skrapar Vunnet.se sida {current_page}...")
             
             target_url = f"https://vunnet.se/upphandlingar?typ=alla&sida={current_page}"
             
@@ -212,7 +215,7 @@ with tab_scan:
                     if len(page_text) < 200:
                         break
                     
-                    prompt = build_strict_prompt(f"Vunnet.se (Sida {current_page}, URL: {target_url})", page_text, today_str)
+                    prompt = build_strict_prompt(f"Vunnet.se (Sida {current_page})", page_text, today_str)
                     
                     response_ai = client.messages.create(
                         model="claude-3-5-haiku-20241022",
@@ -240,59 +243,68 @@ with tab_scan:
                 pass
             time.sleep(0.3)
 
-        # 2. Skrapa alla direktlänkar i sidomenyn
+        # 2. Skrapa alla direktlänkar i sidomenyn med sid-loop (1 till max_portal_pages)
         for link_info in all_sidebar_links:
-            current_step += 1
-            progress_pct = current_step / total_steps
-            progress_bar.progress(min(progress_pct, 1.0))
-            status_text.text(f"Skrapar portal: {link_info['name']}...")
-            
-            try:
-                req = urllib.request.Request(link_info['url'], headers=headers)
-                with urllib.request.urlopen(req, timeout=8) as response:
-                    html_content = response.read().decode('utf-8', errors='ignore')
-                    soup = BeautifulSoup(html_content, 'html.parser')
-                    page_text = soup.get_text(separator="\n", strip=True)
-                    
-                    if len(page_text) < 150:
-                        continue
-                    
-                    prompt = build_strict_prompt(link_info['name'], page_text, today_str)
-                    
-                    response_ai = client.messages.create(
-                        model="claude-haiku-4-5-20251001",
-                        max_tokens=4000,
-                        messages=[{"role": "user", "content": prompt}]
-                    )
-                    
-                    raw_output = "".join([block.text for block in response_ai.content if hasattr(block, "text")])
-                    if raw_output.strip():
-                        clean_json = raw_output.strip()
-                        if "```json" in clean_json:
-                            clean_json = clean_json.split("```json")[1]
-                        if "```" in clean_json:
-                            clean_json = clean_json.split("```")[0]
-                        clean_json = clean_json.strip()
+            for p in range(1, max_portal_pages + 1):
+                current_step += 1
+                progress_pct = current_step / total_steps
+                progress_bar.progress(min(progress_pct, 1.0))
+                
+                # Bygg URL med sidnummer (hantera om länken redan har ? eller &)
+                base_url = link_info['url']
+                if "?" in base_url:
+                    paginated_url = f"{base_url}&page={p}"
+                else:
+                    paginated_url = f"{base_url}?page={p}"
+                
+                status_text.text(f"Skrapar {link_info['name']} (Sida {p})...")
+                
+                try:
+                    req = urllib.request.Request(paginated_url, headers=headers)
+                    with urllib.request.urlopen(req, timeout=8) as response:
+                        html_content = response.read().decode('utf-8', errors='ignore')
+                        soup = BeautifulSoup(html_content, 'html.parser')
+                        page_text = soup.get_text(separator="\n", strip=True)
                         
-                        start_idx = clean_json.find("[")
-                        end_idx = clean_json.rfind("]")
-                        if start_idx != -1 and end_idx != -1:
-                            clean_json = clean_json[start_idx:end_idx+1]
-                            parsed_data = json.loads(clean_json)
-                            if isinstance(parsed_data, list):
-                                master_parsed_data.extend(parsed_data)
-            except Exception:
-                pass
-            time.sleep(0.3)
+                        if len(page_text) < 150:
+                            break # Om sidan är tom, hoppa till nästa länk
+                        
+                        prompt = build_strict_prompt(f"{link_info['name']} (Sida {p})", page_text, today_str)
+                        
+                        response_ai = client.messages.create(
+                            model="claude-haiku-4-5-20251001",
+                            max_tokens=4000,
+                            messages=[{"role": "user", "content": prompt}]
+                        )
+                        
+                        raw_output = "".join([block.text for block in response_ai.content if hasattr(block, "text")])
+                        if raw_output.strip():
+                            clean_json = raw_output.strip()
+                            if "```json" in clean_json:
+                                clean_json = clean_json.split("```json")[1]
+                            if "```" in clean_json:
+                                clean_json = clean_json.split("```")[0]
+                            clean_json = clean_json.strip()
+                            
+                            start_idx = clean_json.find("[")
+                            end_idx = clean_json.rfind("]")
+                            if start_idx != -1 and end_idx != -1:
+                                clean_json = clean_json[start_idx:end_idx+1]
+                                parsed_data = json.loads(clean_json)
+                                if isinstance(parsed_data, list):
+                                    master_parsed_data.extend(parsed_data)
+                except Exception:
+                    pass
+                time.sleep(0.3)
 
         progress_bar.empty()
         status_text.empty()
         
         if master_parsed_data:
             st.session_state['parsed_tenders'] = master_parsed_data
-            st.success(f"✅ Helhetskanning klar! Hittade totalt {len(master_parsed_data)} relevanta management-uppdrag.")
+            st.success(f"✅ Helhetskanning med sid-loopar klar! Hittade totalt {len(master_parsed_data)} relevanta management-uppdrag.")
         else:
-            st.warning("Hittade inga matchande management-uppdrag (bygg, el, VA, entreprenad har filtrerats bort).")
+            st.warning("Hittade inga matchande management-uppdrag på de skannade sidorna.")
 
 # --- GEMENSAMT RESULTAT & EXPORT (FÖR BÅDA KÄLLORNA) ---
 if 'parsed_tenders' in st.session_state and st.session_state['parsed_tenders']:
@@ -334,22 +346,7 @@ if 'parsed_tenders' in st.session_state and st.session_state['parsed_tenders']:
             "Myndighet": item.get("Myndighet", ""),
             "Upphandling": item.get("Upphandling", ""),
             "Sammanfattning": item.get("Sammanfattning", ""),
-            "Säljvinkel": item.get("Saljvinkel", ""),
-            "Go/No-go": "",
-            "Ansvarig konsult": "",
-            "Deadline": item.get("Deadline", ""),
-            "Omfattning": item.get("Omfattning", ""),
-            "Källa": item.get("Källa", "")
-        })
-    
-    rows_for_excel = []
-    for idx in selected_indices:
-        item = st.session_state['parsed_tenders'][idx]
-        rows_for_excel.append({
-            "Myndighet": item.get("Myndighet", ""),
-            "Upphandling": item.get("Upphandling", ""),
-            "Sammanfattning": item.get("Sammanfattning", ""),
-            "Säljvinkel": item.get("Saljvinkel", ""),
+            "Säljvinkel": item.get("Säljvinkel", ""),
             "Go/No-go": "",
             "Ansvarig konsult": "",
             "Deadline": item.get("Deadline", ""),
