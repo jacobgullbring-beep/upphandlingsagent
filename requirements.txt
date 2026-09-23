@@ -3,3 +3,5 @@ pandas
 openpyxl
 anthropic
 playwright
+beautifulsoup4
+requests
