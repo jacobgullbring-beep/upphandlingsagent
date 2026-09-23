@@ -10,7 +10,8 @@ st.set_page_config(
 
 st.title("🛡️ PA D&S Opportunity Radar")
 
-# API key
+# Claude
+
 try:
     api_key = st.secrets["ANTHROPIC_API_KEY"]
 except Exception:
@@ -24,7 +25,8 @@ client = anthropic.Anthropic(api_key=api_key)
 
 st.success("✅ Claude ansluten")
 
-# CSV Upload
+# CSV
+
 uploaded_file = st.file_uploader(
     "Ladda upp CSV",
     type=["csv"]
@@ -38,42 +40,31 @@ if uploaded_file:
 
     st.dataframe(df)
 
-    row = df.iloc[0]
+    if st.button("🚀 Analysera första 5 upphandlingarna"):
 
-    organisation = str(row["Organisation"])
-    title = str(row["Title"])
-    description = str(row["Description"])
+        resultat = []
 
-    st.subheader("Första upphandlingen")
+        rows = df.head(5)
 
-    st.write("Organisation:", organisation)
-    st.write("Titel:", title)
+        progress = st.progress(0)
 
-    if st.button("🚀 Analysera första upphandlingen"):
+        for i, row in rows.iterrows():
 
-        prompt = (
-            "Du arbetar för PA Consulting Defence & Security.\n\n"
-            "Bedöm INTE om kunden är militär.\n"
-            "Bedöm om PA kan sälja management consulting.\n\n"
-            "Ge hög relevans för:\n"
-            "- PMO\n"
-            "- Programledning\n"
-            "- Transformation\n"
-            "- Förändringsledning\n"
-            "- Resiliens\n"
-            "- Beredskap\n"
-            "- Säkerhetsskydd\n"
-            "- Informationssäkerhet\n\n"
-            f"Organisation: {organisation}\n"
-            f"Titel: {title}\n"
-            f"Beskrivning: {description}\n\n"
-            "Svara med 3 rader:\n"
-            "SCORE: X av 10\n"
-            "KATEGORI: ...\n"
-            "MOTIVERING: ..."
-        )
+            organisation = str(row["Organisation"])
+            title = str(row["Title"])
+            description = str(row["Description"])
 
-        with st.spinner("Analyserar..."):
+            prompt = (
+                "Du arbetar för PA Consulting Defence & Security.\n\n"
+                "Bedöm om PA kan sälja management consulting här.\n\n"
+                f"Organisation: {organisation}\n"
+                f"Titel: {title}\n"
+                f"Beskrivning: {description}\n\n"
+                "Svara med:\n"
+                "SCORE: X av 10\n"
+                "KATEGORI: ...\n"
+                "MOTIVERING: ..."
+            )
 
             try:
 
@@ -88,10 +79,24 @@ if uploaded_file:
                     ]
                 )
 
-                st.success("✅ Svar mottaget")
-
-                st.text(response.content[0].text)
+                svar = response.content[0].text
 
             except Exception as e:
 
-                st.error(str(e))
+                svar = str(e)
+
+            resultat.append(
+                {
+                    "Organisation": organisation,
+                    "Titel": title,
+                    "AI Result": svar
+                }
+            )
+
+            progress.progress((i + 1) / len(rows))
+
+        result_df = pd.DataFrame(resultat)
+
+        st.subheader("🎯 Resultat")
+
+        st.dataframe(result_df)
