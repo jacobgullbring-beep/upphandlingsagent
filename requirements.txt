@@ -1,4 +1,4 @@
 streamlit
-anthropic
 playwright
+beautifulsoup4
 pandas
