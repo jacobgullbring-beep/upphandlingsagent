@@ -1,4 +1,5 @@
 import streamlit as st
+from playwright.sync_api import sync_playwright
 
 st.set_page_config(
     page_title="PA D&S Radar",
@@ -8,27 +9,33 @@ st.set_page_config(
 
 st.title("🛡️ PA Defence & Security Opportunity Radar")
 
-st.markdown("""
-### Mål V1
+if st.button("TESTA PLAYWRIGHT"):
 
-Vi testar just nu bara:
+    try:
 
-- Kan Streamlit starta?
-- Kan Playwright starta?
-- Kan vi sedan läsa Mercell?
+        with sync_playwright() as p:
 
-Inga AI-funktioner ännu.
-""")
+            browser = p.chromium.launch(
+                headless=True
+            )
 
-st.success("✅ Streamlit fungerar")
+            page = browser.new_page()
 
-st.write("Nästa steg är att få Playwright/Chromium installerat.")
+            page.goto(
+                "https://example.com",
+                timeout=30000
+            )
 
-st.code("""
-När Playwright fungerar kommer nästa version att:
+            title = page.title()
 
-1. Öppna Göteborgs Mercell-sida
-2. Hämta alla /tender/... länkar
-3. Visa dem i tabell
-4. Därefter lägger vi på Claude-score
-""")
+            browser.close()
+
+        st.success("✅ Playwright fungerar")
+
+        st.write(title)
+
+    except Exception as e:
+
+        st.error("❌ Playwright fungerar inte ännu")
+
+        st.exception(e)
