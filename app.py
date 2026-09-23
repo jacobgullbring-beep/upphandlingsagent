@@ -1,7 +1,9 @@
 import streamlit as st
+import pandas as pd
 import anthropic
 import os
 import json
+from io import BytesIO
 
 st.set_page_config(
     page_title="PA D&S Opportunity Radar",
@@ -10,6 +12,10 @@ st.set_page_config(
 )
 
 st.title("🛡️ PA Defence & Security Opportunity Radar")
+
+# ==========================
+# API KEY
+# ==========================
 
 try:
     api_key = st.secrets["ANTHROPIC_API_KEY"]
@@ -22,53 +28,64 @@ if not api_key:
 
 client = anthropic.Anthropic(api_key=api_key)
 
-st.markdown("""
-### Klistra in upphandlingstext
+st.success("✅ Claude ansluten")
 
-AI bedömer:
+# ==========================
+# UPPLADDNING
+# ==========================
 
-✅ Relevans för PA Defence & Security
-
-✅ PMO
-
-✅ Programledning
-
-✅ Transformation
-
-✅ Beredskap
-
-✅ Säkerhet
-
-✅ Förändringsledning
-
-✅ Värde och prioritet
-""")
-
-text_input = st.text_area(
-    "Upphandlingstext",
-    height=350
+uploaded_file = st.file_uploader(
+    "Ladda upp Excel eller CSV",
+    type=["xlsx", "csv"]
 )
 
-if st.button("🚀 Analysera"):
+if uploaded_file:
 
-    if not text_input:
+    if uploaded_file.name.endswith(".csv"):
 
-        st.warning("Klistra in upphandlingstext först.")
-        st.stop()
+        df = pd.read_csv(uploaded_file)
 
-    prompt = f"""
-Du arbetar som erfaren bid manager för
-PA Consulting Defence & Security Sverige.
+    else:
 
-Fundera INTE på om kunden är militär.
+        df = pd.read_excel(uploaded_file)
 
-Fundera på om PA Consulting D&S skulle kunna sälja:
+    st.subheader("Förhandsvisning")
+
+    st.dataframe(df.head())
+
+    col_to_analyse = st.selectbox(
+        "Vilken kolumn innehåller upphandlingstexten?",
+        df.columns
+    )
+
+    max_rows = st.slider(
+        "Antal rader att analysera",
+        min_value=1,
+        max_value=min(50, len(df)),
+        value=min(10, len(df))
+    )
+
+    if st.button("🚀 Analysera upphandlingar"):
+
+        results = []
+
+        progress = st.progress(0)
+
+        rows = df.head(max_rows)
+
+        for i, (_, row) in enumerate(rows.iterrows()):
+
+            text = str(row[col_to_analyse])
+
+            prompt = f"""
+Du arbetar för PA Consulting Defence & Security Sverige.
+
+Bedöm om upphandlingen är relevant för:
 
 - PMO
 - Programledning
 - Transformation
 - Förändringsledning
-- Operating Model
 - Governance
 - Risk
 - Resiliens
@@ -77,68 +94,110 @@ Fundera på om PA Consulting D&S skulle kunna sälja:
 - Informationssäkerhet
 - Cybersäkerhet
 - Verksamhetsutveckling
-- Strategi
 
-Bedöm upphandlingen.
-
-Returnera ENDAST JSON:
+Returnera endast JSON:
 
 {{
   "score": 0,
   "recommendation": "",
   "category": "",
-  "estimated_value": "",
-  "summary": "",
-  "reason": "",
-  "opportunity_type": "",
-  "keywords_found": []
+  "reason": ""
 }}
 
 UPPHANDLING:
 
-{text_input}
+{text}
 """
 
-    try:
+            try:
 
-        with st.spinner("AI analyserar..."):
+                response = client.messages.create(
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=600,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ]
+                )
 
-            response = client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=2000,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": prompt
+                result_text = response.content[0].text
+
+                try:
+
+                    parsed = json.loads(result_text)
+
+                except:
+
+                    parsed = {
+                        "score": 0,
+                        "recommendation": "Parse Error",
+                        "category": "",
+                        "reason": result_text[:500]
                     }
-                ]
-            )
 
-        result = response.content[0].text
+            except Exception as e:
+
+                parsed = {
+                    "score": 0,
+                    "recommendation": "Error",
+                    "category": "",
+                    "reason": str(e)
+                }
+
+            result_row = row.to_dict()
+
+            result_row["D&S Score"] = parsed.get("score", 0)
+            result_row["Recommendation"] = parsed.get("recommendation", "")
+            result_row["Category"] = parsed.get("category", "")
+            result_row["Reason"] = parsed.get("reason", "")
+
+            results.append(result_row)
+
+            progress.progress((i + 1) / len(rows))
+
+        result_df = pd.DataFrame(results)
+
+        result_df = result_df.sort_values(
+            by="D&S Score",
+            ascending=False
+        )
 
         st.subheader("🎯 Resultat")
 
-        try:
+        st.dataframe(
+            result_df,
+            use_container_width=True
+        )
 
-            parsed = json.loads(result)
+        high_priority = result_df[
+            result_df["D&S Score"] >= 80
+        ]
 
-            score = parsed.get("score", 0)
+        st.subheader("🔥 High Priority Opportunities")
 
-            if score >= 80:
-                st.success(f"🔥 Hög potential ({score}/100)")
+        st.dataframe(
+            high_priority,
+            use_container_width=True
+        )
 
-            elif score >= 50:
-                st.warning(f"🟡 Möjlig möjlighet ({score}/100)")
+        output = BytesIO()
 
-            else:
-                st.error(f"🔴 Låg relevans ({score}/100)")
+        with pd.ExcelWriter(
+            output,
+            engine="openpyxl"
+        ) as writer:
 
-            st.json(parsed)
+            result_df.to_excel(
+                writer,
+                index=False,
+                sheet_name="D&S Radar"
+            )
 
-        except:
-
-            st.code(result)
-
-    except Exception as e:
-
-        st.exception(e)
+        st.download_button(
+            label="📥 Ladda ned analyserad Excel",
+            data=output.getvalue(),
+            file_name="PA_DS_Radar.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
