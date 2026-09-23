@@ -1,8 +1,6 @@
 import streamlit as st
 import anthropic
-import requests
 import os
-from bs4 import BeautifulSoup
 import json
 
 st.set_page_config(
@@ -25,139 +23,122 @@ if not api_key:
 client = anthropic.Anthropic(api_key=api_key)
 
 st.markdown("""
-### Syfte
-
-Klistra in:
-
-- En upphandlingslänk
-- Eller upphandlingstext
+### Klistra in upphandlingstext
 
 AI bedömer:
 
-- Relevans för PA Defence & Security
+✅ Relevans för PA Defence & Security
+
+✅ PMO
+
+✅ Programledning
+
+✅ Transformation
+
+✅ Beredskap
+
+✅ Säkerhet
+
+✅ Förändringsledning
+
+✅ Värde och prioritet
+""")
+
+text_input = st.text_area(
+    "Upphandlingstext",
+    height=350
+)
+
+if st.button("🚀 Analysera"):
+
+    if not text_input:
+
+        st.warning("Klistra in upphandlingstext först.")
+        st.stop()
+
+    prompt = f"""
+Du arbetar som erfaren bid manager för
+PA Consulting Defence & Security Sverige.
+
+Fundera INTE på om kunden är militär.
+
+Fundera på om PA Consulting D&S skulle kunna sälja:
+
 - PMO
 - Programledning
 - Transformation
+- Förändringsledning
+- Operating Model
+- Governance
+- Risk
+- Resiliens
 - Beredskap
 - Säkerhetsskydd
-- Värdeuppskattning
-""")
+- Informationssäkerhet
+- Cybersäkerhet
+- Verksamhetsutveckling
+- Strategi
 
-url = st.text_input(
-    "Mercell eller annan upphandlingslänk"
-)
+Bedöm upphandlingen.
 
-manual_text = st.text_area(
-    "Eller klistra in upphandlingstext",
-    height=250
-)
+Returnera ENDAST JSON:
 
-def fetch_url(url):
+{{
+  "score": 0,
+  "recommendation": "",
+  "category": "",
+  "estimated_value": "",
+  "summary": "",
+  "reason": "",
+  "opportunity_type": "",
+  "keywords_found": []
+}}
+
+UPPHANDLING:
+
+{text_input}
+"""
 
     try:
 
-        response = requests.get(
-            url,
-            timeout=20,
-            headers={
-                "User-Agent":"Mozilla/5.0"
-            }
-        )
-
-        soup = BeautifulSoup(
-            response.text,
-            "html.parser"
-        )
-
-        return soup.get_text(
-            separator=" ",
-            strip=True
-        )
-
-    except Exception as e:
-
-        return f"ERROR: {e}"
-
-if st.button("🚀 Analysera upphandling"):
-
-    source_text = ""
-
-    if url:
-
-        with st.spinner("Hämtar sida..."):
-
-            source_text = fetch_url(url)
-
-    elif manual_text:
-
-        source_text = manual_text
-
-    else:
-
-        st.warning(
-            "Klistra in en länk eller text"
-        )
-
-        st.stop()
-
-    with st.spinner("Claude analyserar..."):
-
-        prompt = f"""
-Du är bid manager för PA Consulting Defence & Security.
-
-Bedöm om denna upphandling är relevant.
-
-Fokusera på:
-
-- Transformation
-- Programledning
-- PMO
-- Förändringsledning
-- Verksamhetsutveckling
-- Beredskap
-- Säkerhetsskydd
-- Totalförsvar
-
-Returnera endast JSON.
-
-Format:
-
-{{
- "score": 0,
- "recommendation": "",
- "category": "",
- "estimated_value": "",
- "summary": "",
- "reason": ""
-}}
-
-Text:
-
-{source_text[:30000]}
-"""
-
-        try:
+        with st.spinner("AI analyserar..."):
 
             response = client.messages.create(
                 model="claude-haiku-4-5-20251001",
                 max_tokens=2000,
                 messages=[
                     {
-                        "role":"user",
-                        "content":prompt
+                        "role": "user",
+                        "content": prompt
                     }
                 ]
             )
 
-            result = response.content[0].text
+        result = response.content[0].text
 
-            st.subheader("🎯 AI-bedömning")
+        st.subheader("🎯 Resultat")
 
-            st.code(
-                result,
-                language="json"
-            )
+        try:
 
-        except Exception as e:
+            parsed = json.loads(result)
 
-            st.exception(e)
+            score = parsed.get("score", 0)
+
+            if score >= 80:
+                st.success(f"🔥 Hög potential ({score}/100)")
+
+            elif score >= 50:
+                st.warning(f"🟡 Möjlig möjlighet ({score}/100)")
+
+            else:
+                st.error(f"🔴 Låg relevans ({score}/100)")
+
+            st.json(parsed)
+
+        except:
+
+            st.code(result)
+
+    except Exception as e:
+
+        st.exception(e)
