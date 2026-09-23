@@ -87,34 +87,34 @@ TARGET_URLS = {
 tab1, tab2, tab3 = st.tabs(["📥 Inmatning & Sök", "📊 Historik & Spärr", "⚙️ Om systemet"])
 
 with tab1:
-    st.subheader("1. Välj inmatningskälla")
+    st.subheader("1. Välj inmatningskällor (kombinera fritt)")
+    st.write("Bocka för en eller flera källor som du vill samla in data från samtidigt:")
     
-    inmatnings_val = st.radio(
-        "Hur vill du samla in upphandlingarna?",
-        ["Automatiskt från era definierade kommuner & portaler", "Ladda upp ZIP-fil med mail/underlag", "Manuell inklistring av text"]
-    )
+    # Kryssrutor för att kombinera valen
+    val_portaler = st.checkbox("🌐 Skanna definierade kommuner & portaler (Göteborg, Malmö, Clira, Tendsign m.fl.)", value=True)
+    val_zip = st.checkbox("📦 Ladda upp ZIP-arkiv med sparade mail / underlag (.eml / .txt)", value=False)
+    val_manuell = st.checkbox("✍️ Klistra in text / mailinnehåll manuellt", value=False)
     
-    raw_text = ""
+    combined_raw_text = ""
     
-    if inmatnings_val == "Automatiskt från era definierade kommuner & portaler":
-        col_p1, col_p2 = st.columns(2)
-        with col_p1:
-            antal_sidor = st.slider("Antal sidor / djup att kontrollera:", min_value=1, max_value=10, value=2)
-        with col_p2:
-            st.info(f"💡 Skriptet har tillgång till alla dina **{len(TARGET_URLS)} unika direktlänkar** (Göteborg, Malmö, Uppsala, Linköping, Clira, Tendsign, Mercell m.fl.).")
+    # Dynamiska fält beroende på vad som kryssats för
+    if val_portaler:
+        with st.expander("🛠️ Inställningar för portalskanning"):
+            antal_sidor = st.slider("Antal sidor / djup att kontrollera per portal:", min_value=1, max_value=10, value=2)
+            st.info(f"💡 Skriptet kommer att beakta alla dina **{len(TARGET_URLS)} unika direktlänkar**.")
             
-        with st.expander("🔍 Visa alla anslutna målsidor som skannas"):
-            for namn, länk in TARGET_URLS.items():
-                st.markdown(f"- **{namn}**: `{länk}`")
-                
-    elif inmatnings_val == "Ladda upp ZIP-fil med mail/underlag":
-        uploaded_zip = st.file_uploader("Ladda upp ZIP-arkiv med sparade mail (.eml / .txt)", type=["zip"])
+    if val_zip:
+        st.markdown("---")
+        uploaded_zip = st.file_uploader("Ladda upp ZIP-arkiv med underlag", type=["zip"])
         if uploaded_zip:
             st.success(f"ZIP-arkiv uppladdat: {uploaded_zip.name}")
-            raw_text = "Innehåll extraherat från uppladdat ZIP-arkiv..."
+            combined_raw_text += "\n[Innehåll från uppladdat ZIP-arkiv]\n"
             
-    else:
-        raw_text = st.text_area("Klistra in upphandlingsnotiser här:", height=200, placeholder="Klistra in text eller mailinnehåll här...")
+    if val_manuell:
+        st.markdown("---")
+        manuell_text = st.text_area("Klistra in upphandlingsnotiser eller mail här:", height=150, placeholder="Klistra in texter här...")
+        if manuell_text:
+            combined_raw_text += f"\n[Manuell textinmatning]:\n{manuell_text}\n"
 
     st.markdown("---")
     col1, col2 = st.columns(2)
@@ -124,23 +124,28 @@ with tab1:
         ansvarig_analytiker = st.text_input("Analyserad av:", value="Köpenhamn / Danmark-teamet")
 
     if st.button("🚀 Kör sökning, djupläsning & AI-analys", type="primary"):
-        if not api_key:
+        if not val_portaler and not val_zip and not val_manuell:
+            st.warning("⚠️ Du måste välja minst en inmatningskälla ovan för att köra analysen!")
+        elif not api_key:
             st.error("Du behöver en Anthropic API-nyckel för att köra Claude-analysen!")
         else:
-            with st.spinner("Skannar igenom alla kommun- och portal-länkar, djupläser uppdrag för pris/omfattning och rensar bort byggbrus..."):
+            with st.spinner("Bearbetar vald(a) inmatningskällor, djupläser uppdrag för pris/omfattning och rensar bort byggbrus..."):
                 
-                # Sammanfatta länkarna till Claude så den förstår skalan
-                urls_context = "\n".join([f"- {namn}: {länk}" for namn, länk in TARGET_URLS.items()])
+                # Bygg upp kontext beroende på val
+                kallor_beskrivning = []
+                if val_portaler:
+                    urls_context = "\n".join([f"- {namn}: {länk}" for namn, länk in TARGET_URLS.items()])
+                    kallor_beskrivning.append(f"Portallänkar som har granskats:\n{urls_context}")
+                if val_zip or val_manuell:
+                    kallor_beskrivning.append(f"Inmatad/uppladdad textdata:\n{combined_raw_text}")
+                
+                full_context_input = "\n\n".join(kallor_beskrivning)
                 
                 prompt = f"""
                 Du är en expert på upphandlingar och säljstöd för PA Consulting inom Defence & Security.
-                Följande specifika kommun- och portal-länkar har genomsökts:
-                {urls_context}
+                Följande källor/data har använts för denna analys:
+                {full_context_input}
                 
-                Ytterligare text/underlag (om angivet):
-                ---
-                {raw_text if raw_text else "Ingen extra text angiven. Generera realistiska och relevanta upphandlingar baserat på de länkade kommunerna (som Göteborg, Malmö, Uppsala, Linköping, MSB, Försvarsmakten etc.) med fokus på krisberedskap, säkerhetsskydd, cyber och strategisk styrning."}
-                ---
                 Dina uppgifter:
                 1. Filtrera bort allt irrelevant bygg- och anläggningsbrus.
                 2. Extrahera Myndighet/Kommun, Upphandling, Deadline, samt djupläs eller uppskatta Omfattning & Pris.
@@ -153,7 +158,7 @@ with tab1:
                 try:
                     response = client.messages.create(
                         model="claude-haiku-4-5-20251001",
-                        max_tokens=4000,
+                        max_tokens=8000,
                         messages=[{"role": "user", "content": prompt}]
                     )
                     
@@ -165,7 +170,7 @@ with tab1:
                         
                     parsed_data = json.loads(content_text)
                     st.session_state['parsed_tenders'] = parsed_data
-                    st.success(f"✅ Claude har analyserat era källor och hittade {len(parsed_data)} relevanta uppdrag!")
+                    st.success(f"✅ Analysen är klar och hittade {len(parsed_data)} relevanta uppdrag utifrån dina valda källor!")
                     
                 except Exception as e:
                     st.error(f"Kunde inte tolka svar från Claude: {e}")
@@ -272,7 +277,7 @@ with tab3:
     st.subheader("⚙️ Om systemet")
     st.markdown("""
     Verktyg för **PA Consulting (Defence & Security)**:
-    1. **Skanning av era djuplänkar** (Göteborg, Malmö, Uppsala, Linköping, Clira, Tendsign, Mercell med flera).
+    1. **Flexibel källkombination** (skanna portaler, ladda upp ZIP och klistra in text samtidigt).
     2. **Claude AI-djupläsning** av enskilda uppdrag för att få fram värde, pris och omfattning.
     3. **Byggbrus-filtrering** för att rensa bort ointressanta anbud.
     4. **Professionell Excel-export** för direkt utskick till säljarna i Sverige.
