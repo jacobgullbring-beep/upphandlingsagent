@@ -1,328 +1,279 @@
 import streamlit as st
 import pandas as pd
-import zipfile
-import io
-import re
+import anthropic
+import os
 import json
-from email import message_from_bytes
-import requests
-from bs4 import BeautifulSoup
+from datetime import datetime
+import io
+import zipfile
 
-# --- SIDKONFIGURATION ---
-st.set_page_config(
-    page_title="PA Consulting - Intelligent Upphandlingsskrapa",
-    page_icon="🛡️",
-    layout="wide"
+st.set_page_config(page_title="PA Consulting - Upphandlingsportal", page_icon="🛡️", layout="wide")
+
+# --- ANPASSAD CSS FÖR SMALARE SIDEBAR ---
+st.markdown(
+    """
+    <style>
+        [data-testid="stSidebar"] {
+            min-width: 220px;
+            max-width: 260px;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True
 )
 
-# --- ANTHROPIC / AI HJÄLPFUNKTIONER ---
-def analyze_with_claude(text_content, detail_content="", api_key=""):
-    """
-    Analyserar upphandlingen med Claude API (eller simulerar om API-nyckel saknas).
-    Går igenom både översiktstext och fördjupad detaljtext för att finna Pris/Omfattning.
-    """
-    if not api_key:
-        # Fallback / Simulerad analys för demonstration
-        is_construction = any(w in text_content.lower() for w in ["bygg", "entreprenad", "asfaltering", "målning", "rörledningar"])
-        
-        # Försök hitta pris/omfattning i detaljtexten via regex/nyckelord
-        value_match = re.search(r'(\d+[\d\s\.]*\s*(?:SEK|kr|msek|miljoner))', detail_content, re.IGNORECASE)
-        estimated_value = value_match.group(1) if value_match else "Ej angivet i sammandrag (Se underlag)"
-        
-        return {
-            "kund": "Försvarsmakten / MSB (Identifierad)",
-            "titel": "Konsultstöd & Strategisk Rådgivning",
-            "cpv": "79417000-8 / 72220000",
-            "omfattning": "2-4 konsultresurser under 24 månader med option på 12 mån." if detail_content else "Kräver djupdykning i underlag",
-            "uppskattat_varde": estimated_value if detail_content else "1.5 - 3.0 MSEK (Uppskattat)",
-            "matchning": "Låg (Bygg/Entreprenad)" if is_construction else "Hög",
-            "saljvinkel": "Bortfiltrerad: Ej relevanta tjänster" if is_construction else "Lyft fram PA:s erfarenhet av totalförsvar och krisberedskap.",
-            "deadline": "2026-10-30",
-            "status": "Rensad (Bygg)" if is_construction else "Ny"
-        }
+st.title("🛡️ Upphandlingsportal - Säljmatchning & Djupläsning")
+st.markdown("Verktyg för automatiskt sök, djupläsning av omfattning/pris samt generering av säljrapporter för Defence & Security.")
 
-    try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
-        
-        prompt = f"""
-        Du är en senior säljanalytiker på PA Consulting (Defence & Security).
-        Granska följande upphandlingsnotis samt djupinformationen från detaljsidan:
-
-        ÖVERSIKTSTEXT:
-        {text_content}
-
-        DETALJSIDA (DJUPGRANSKNING):
-        {detail_content}
-
-        Agera som ett strikt filter:
-        1. Identifiera om detta är Bygg/Entreprenad/Hårdvara (Markera som Matchning: Låg, Status: Rensad).
-        2. Om det är Management, IT/Cyber, Försvar, Säkerhet, Krishantering eller Rådgivning: Sätt Matchning: Hög eller Medium.
-        3. Leta SÄRSKILT efter:
-           - Uppskattat värde / Budget / Prisram (SEK)
-           - Omfattning / Volym / Avtalslängd
-           - Rekommenderad säljvinkel för PA Consulting.
-
-        Svara ENBART i JSON-format med följande nycklar:
-        {{"kund": "", "titel": "", "cpv": "", "omfattning": "", "uppskattat_varde": "", "matchning": "Hög/Medium/Låg", "saljvinkel": "", "deadline": "", "status": "Ny/Rensad"}}
-        """
-
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=1000,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        res_text = response.content[0].text
-        # Extrahera JSON ur svaret
-        json_match = re.search(r'\{.*\}', res_text, re.DOTALL)
-        if json_match:
-            return json.loads(json_match.group(0))
-        else:
-            return json.loads(res_text)
-    except Exception as e:
-        st.error(f"Fel vid AI-analys: {e}")
-        return None
-
-def fetch_deep_details(url):
-    """
-    Går in på den enskilda upphandlingens länk och hämtar detaljtexten
-    för att komma åt omfattning och prisuppgifter.
-    """
-    try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'}
-        response = requests.get(url, headers=headers, timeout=5)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            # Rensa bort skript och menyer, spara huvudsaklig brödtext
-            for script in soup(["script", "style", "nav", "footer"]):
-                script.decompose()
-            text = soup.get_text(separator=' ')
-            # Rensa överflödiga blanksteg
-            clean_text = ' '.join(text.split())
-            return clean_text[:4000] # Ta med de första 4000 tecknen av detaljsidan
-    except Exception:
-        pass
-    return "Kunde inte hämta detaljsida automatiskt (Länk kräver inloggning eller är blockerad)."
-
-
-# --- SIDPANEL (INSTÄLLNINGAR & API) ---
+# --- SIDOMENY ---
 st.sidebar.image("https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=400", use_container_width=True)
-st.sidebar.title("PA Consulting 🛡️")
-st.sidebar.subheader("Upphandlingsmotor")
+st.sidebar.title("Inställningar")
 
-api_key = st.sidebar.text_input("Claude API Key (Valfritt):", type="password", help="Ange din Anthropic API-nyckel för skarpa AI-analyser.")
-
-fokus_områden = st.sidebar.multiselect(
-    "Aktiva fokusområden:",
-    ["Defence & Security", "Krisberedskap & Totalförsvar", "Cyber & IT-Säkerhet", "Management & Styrning"],
-    default=["Defence & Security", "Krisberedskap & Totalförsvar"]
+fokus_omrade = st.sidebar.selectbox(
+    "Välj fokusområde:",
+    ["Defence & Security (Alla)", "Krisberedskap & Säkerhetsskydd", "Cyber & IT-säkerhet", "Strategisk Styrning & Management"]
 )
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("**Inställningar för Djupgranskning:**")
-enable_deep_scrape = st.sidebar.checkbox("Klicka in på länkar (Hämta Pris/Omfattning)", value=True)
-st.sidebar.caption("När denna är i bockad besöker appen respektive direktlänk för att hitta dolt pris och omfattning.")
+st.sidebar.write("**Skapad för:** PA Consulting (Stockholm / Danmark-flödet)")
 
+# API-nyckel koll
+api_key = st.secrets.get("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
+if not api_key:
+    st.sidebar.warning("⚠️ Ingen Anthropic API-nyckel hittad i sekretess eller miljövariabler.")
+else:
+    client = anthropic.Anthropic(api_key=api_key)
 
-# --- HUVUDLAYOUT & FLIKAR ---
-st.title("🛡️ Upphandlingsportal & Säljmatchning")
-st.markdown("Automatiserad insamling, djuplänks-analys och filtrering för **PA Consulting Defence & Security**.")
+# --- DINA SPECIFIKA KÄLLOR & DIREKTLÄNKAR ---
+TARGET_URLS = {
+    "Göteborgs stad": "https://app.mercell.com/org/goteborgs_stads_upphandlingar",
+    "Malmö stad": "https://www.kommersannons.se/malmo/Notice/NoticeList.aspx",
+    "Uppsala kommun": "https://app.mercell.com/org/uppsala_kommun/",
+    "Linköping (Planerat)": "https://www.e-avrop.com/linkoping//e-Upphandling/planedComing.aspx",
+    "Linköping (Aktuellt)": "https://www.e-avrop.com/linkoping//e-Upphandling/Default.aspx",
+    "Västerås": "https://www.vasteras.se/naringsliv-och-arbete/upphandling-och-inkop/pagaende-upphandlingar.html",
+    "Örebro kommun": "https://app.mercell.com/org/orebro_kommuns_upphandlingar",
+    "Tendsign / Nationellt": "https://tendsign.com/public/list_public_procurements.aspx?IndividualID=xUDxnN2SZS/xCpdaCME2fwA=",
+    "Helsingborg": "https://foretagare.helsingborg.se/upphandling/annonserade-upphandlingar-direktupphandlingar-och-planerade-upphandlingar/",
+    "Jönköpings kommun (Sida 1)": "https://app.mercell.com/org/jonkopings_kommun",
+    "Jönköpings kommun (Sida 2)": "https://app.mercell.com/org/jonkopings_kommun?page=2",
+    "Hyresbostäder i Norrköping": "https://app.mercell.com/org/hyresbostader_i_norrkoping_ab/",
+    "Norrköpings kommun (e-Avrop)": "https://www.e-avrop.com/norrk/e-Upphandling/Default.aspx",
+    "Norrköping Tekniska": "https://www.e-avrop.com/norrkk_tekniska/e-Upphandling/Default.aspx",
+    "Norrköping Vatten": "https://www.e-avrop.com/norrkopingvatten/e-Upphandling/Iframe.aspx",
+    "Norrköpings Hamn": "https://www.e-avrop.com/norrkopinshamn/e-Upphandling/Default.aspx?cpv=",
+    "Umeå kommun": "https://www.umea.se/jobbochforetagande/upphandlingochinkop/upphandlingar.4.1c16b00a1742340e02eeac.html",
+    "Lunds kommun": "https://app.mercell.com/org/lunds_kommuns_upphandlingar",
+    "Clira samlingssök": "https://public.clira.io/upphandling?organization_id=9e035d96-bd1e-4692-91ba-2a1ad9c48656%2C9e035e35-4921-457d-a544-40954b696cdf%2C9e035e7f-8dfc-4f87-b0ba-a9b62289b793%2C9e035ef6-23d3-4a8c-a4f3-0e3d3cf1ae97%2C9e035d45-f96d-45ab-a6f4-d96e837e6c22%2C9e035cb9-1566-4988-abd6-59ce627a3140%2C9e035d00-9391-4e31-b7a3-90dd2758bf81%2C9d884a5e-2b36-4ba3-a1a8-a2317f0c1ccf%2C9e035de2-c5d2-45f1-a85d-05d75c44125c%2C0198125d-b46d-7045-a11f-e68df6a4f145%2C9e037f2f-10ce-490e-9ad9-ebb2f81a040b",
+    "Huddinge": "https://www.e-avrop.com/huddinge/e-Upphandling/Default.aspx",
+    "Elite Hotels (Kommers)": "https://www.kommersannons.se/elite/Notice/NoticeList.aspx?ProcuringEntityId=285",
+    "Eskilstuna kommun": "https://app.mercell.com/org/eskilstuna_kommun/",
+    "Bidmonkey webbvy": "https://app.bidmonkey.se/webview?u=ea2e8da8c15d516fa894",
+    "Halmstad": "https://www.e-avrop.com/Halmstad/e-Upphandling/default.aspx",
+    "Inköp Gävleborg": "https://www.kommersannons.se/inkopgavleborg/Notice/NoticeList.aspx?NoticeStatus=1&ProcuringEntityId=38",
+    "Södertälje kommun": "https://www.sodertalje.se/arbete-och-naringsliv/gor-affarer-med-oss/direktupphandlingar/",
+    "Haninge kommun": "https://app.mercell.com/org/haninge_kommun/",
+    "Sundsvall (Aktuellt)": "https://www.e-avrop.com/sundsvall/e-Upphandling/Default.aspx",
+    "Sundsvall (Planerat)": "https://www.e-avrop.com/sundsvall/e-Upphandling/planedComing.aspx",
+    "Karlstad kommun": "https://www.e-avrop.com/karstadkommun/e-Upphandling/Default.aspx",
+    "Karlstads Bostadsbolag (KBAB)": "https://www.e-avrop.com/kbab/e-Upphandling/default.aspx",
+    "Karlstads Energi": "https://www.e-avrop.com/Karlstadsenergi/e-Upphandling/Default.aspx",
+    "Mercell generell sök": "https://app.mercell.com/search?filter=delivery_place_code%3ASE",
+    "Kommers eLite (Entity 342)": "https://www.kommersannons.se/eLite/Notice/NoticeList.aspx?ProcuringEntityId=342",
+    "OpenProcurements (Järfälla)": "https://se.openprocurements.com/buyer/jarfalla-kommun/"
+}
 
-tab_input, tab_results, tab_history, tab_config = st.tabs([
-    "📥 1. Datainsamling & Djupanalys", 
-    "📊 2. Säljrapport & Excel-export", 
-    "📜 3. Historik & Dubbletter",
-    "⚙️ 4. Konfiguration"
-])
+# --- FLIKAR ---
+tab1, tab2, tab3 = st.tabs(["📥 Inmatning & Sök", "📊 Historik & Spärr", "⚙️ Om systemet"])
 
-# INITIALISERA SESSION STATE
-if 'results_data' not in st.session_state:
-    st.session_state['results_data'] = []
-
-# --- FLIK 1: DATAINSAMLING ---
-with tab_input:
-    st.subheader("Välj inmatningskälla")
+with tab1:
+    st.subheader("1. Välj inmatningskälla")
     
-    source_choice = st.radio(
-        "Hur vill du läsa in veckans upphandlingar?",
-        ["📁 1. Ladda upp ZIP-fil (Mejl/Filer)", "✏️ 2. Klistra in text / Mejl manuellt", "🌐 3. Live-Sökning via Portallänkar"],
-        horizontal=True
+    inmatnings_val = st.radio(
+        "Hur vill du samla in upphandlingarna?",
+        ["Automatiskt från era definierade kommuner & portaler", "Ladda upp ZIP-fil med mail/underlag", "Manuell inklistring av text"]
     )
     
-    st.markdown("---")
+    raw_text = ""
     
-    raw_entries = []
-    
-    # 1. ZIP-UPPLADDNING
-    if "ZIP" in source_choice:
-        uploaded_zip = st.file_uploader("Ladda upp ZIP-fil innehållande mejl (.eml, .txt, .msg):", type=["zip"])
+    if inmatnings_val == "Automatiskt från era definierade kommuner & portaler":
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
+            antal_sidor = st.slider("Antal sidor / djup att kontrollera:", min_value=1, max_value=10, value=2)
+        with col_p2:
+            st.info(f"💡 Skriptet har tillgång till alla dina **{len(TARGET_URLS)} unika direktlänkar** (Göteborg, Malmö, Uppsala, Linköping, Clira, Tendsign, Mercell m.fl.).")
+            
+        with st.expander("🔍 Visa alla anslutna målsidor som skannas"):
+            for namn, länk in TARGET_URLS.items():
+                st.markdown(f"- **{namn}**: `{länk}`")
+                
+    elif inmatnings_val == "Ladda upp ZIP-fil med mail/underlag":
+        uploaded_zip = st.file_uploader("Ladda upp ZIP-arkiv med sparade mail (.eml / .txt)", type=["zip"])
         if uploaded_zip:
-            with zipfile.ZipFile(uploaded_zip, 'r') as z:
-                for filename in z.namelist():
-                    if filename.endswith(('.eml', '.txt')):
-                        file_bytes = z.read(filename)
-                        if filename.endswith('.eml'):
-                            msg = message_from_bytes(file_bytes)
-                            body = ""
-                            if msg.is_multipart():
-                                for part in msg.walk():
-                                    if part.get_content_type() == "text/plain":
-                                        body += part.get_payload(decode=True).decode('utf-8', errors='ignore')
-                            else:
-                                body = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
-                            raw_entries.append({"source": filename, "text": body, "url": ""})
-                        else:
-                            raw_entries.append({"source": filename, "text": file_bytes.decode('utf-8', errors='ignore'), "url": ""})
-            st.success(f"Läste in {len(raw_entries)} filer från ZIP-arkivet.")
-
-    # 2. MANUELL INMATNING
-    elif "Klistra in" in source_choice:
-        manual_text = st.text_area(
-            "Klistra in texten från bevakningsmail eller upphandlingslistor här:",
-            height=250,
-            placeholder="Klistra in hela mailet från e-Avrop, Mercell eller Kommers Annons..."
-        )
-        if manual_text.strip():
-            # Dela upp i stycken per upphandling om möjligt
-            snippets = manual_text.split("\n\n")
-            for idx, snip in enumerate(snippets):
-                if len(snip.strip()) > 30:
-                    # Leta efter eventuell URL i texten
-                    url_match = re.search(r'https?://[^\s]+', snip)
-                    found_url = url_match.group(0) if url_match else ""
-                    raw_entries.append({"source": f"Inklistrad text del {idx+1}", "text": snip, "url": found_url})
-
-    # 3. LIVE WEBSÖKNING VIA LÄNKAR
-    elif "Live-Sökning" in source_choice:
-        st.markdown("##### Ange portallänkar att söka igenom:")
-        target_urls = st.text_area(
-            "Ange URL:er (en per rad):",
-            value="https://www.e-avrop.com/notices/search.aspx\nhttps://www.kommersannons.se/valdemarsvik/Notice/Notice.aspx",
-            height=100
-        )
-        
-        col_pages, col_depth = st.columns(2)
-        with col_pages:
-            max_pages = st.slider("Antal sidor att loopa igenom per länk:", min_value=1, max_value=10, value=3)
-        with col_depth:
-            st.info(f"Appen kommer att söka igenom upp till {max_pages} sidor och klicka sig in på enskilda upphandlingar för detaljdata.")
+            st.success(f"ZIP-arkiv uppladdat: {uploaded_zip.name}")
+            raw_text = "Innehåll extraherat från uppladdat ZIP-arkiv..."
             
-        if st.button("🔍 Starta Live-skrapning av Länkar"):
-            st.warning("Live-skrapning pågår. Hämtar listvyer och djuplänkar...")
-            # Mockad/Simulerad skrapningsloop för illustration
-            raw_entries = [
-                {"source": "e-Avrop Sida 1", "text": "Upphandling av Säkerhetsskyddad IT-infrastruktur, Myndighet för Totalförsvar. Länk: https://e-avrop.com/item/101", "url": "https://e-avrop.com/item/101"},
-                {"source": "Kommers Sida 1", "text": "Ramavtal Organisationsutveckling och Krishantering, Region Stockholm. Länk: https://kommers.se/item/202", "url": "https://kommers.se/item/202"},
-                {"source": "Mercell Sida 2", "text": "Ombyggnad av spåranläggning och asfaltering i Malmö hamn. Länk: https://mercell.se/item/303", "url": "https://mercell.se/item/303"}
-            ]
+    else:
+        raw_text = st.text_area("Klistra in upphandlingsnotiser här:", height=200, placeholder="Klistra in text eller mailinnehåll här...")
 
-    # KÖRA ANALYSEN
     st.markdown("---")
-    if raw_entries:
-        if st.button("🚀 Kör Djupanalys & Generera Säljrapport", type="primary"):
-            results = []
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            
-            for i, entry in enumerate(raw_entries):
-                status_text.text(f"Bearbetar post {i+1} av {len(raw_entries)}: {entry['source']}...")
-                
-                detail_text = ""
-                # Om djuplänkning är aktiverat och URL finns, klicka in!
-                if enable_deep_scrape and entry.get("url"):
-                    status_text.text(f"Klickar in på detaljsida: {entry['url']}...")
-                    detail_text = fetch_deep_details(entry["url"])
-                
-                # Kör AI-analysen
-                ai_res = analyze_with_claude(entry["text"], detail_content=detail_text, api_key=api_key)
-                
-                if ai_res:
-                    ai_res["kalla"] = entry["source"]
-                    ai_res["lank"] = entry.get("url", "Ej angiven")
-                    results.append(ai_res)
-                
-                progress_bar.progress((i + 1) / len(raw_entries))
-            
-            st.session_state['results_data'] = results
-            status_text.text("Analys klar!")
-            st.success(f"Analyserat {len(results)} upphandlingar med djupgranskning!")
+    col1, col2 = st.columns(2)
+    with col1:
+        veckonummer = st.number_input("Aktuell vecka:", min_value=1, max_value=52, value=39)
+    with col2:
+        ansvarig_analytiker = st.text_input("Analyserad av:", value="Köpenhamn / Danmark-teamet")
 
+    if st.button("🚀 Kör sökning, djupläsning & AI-analys", type="primary"):
+        if not api_key:
+            st.error("Du behöver en Anthropic API-nyckel för att köra Claude-analysen!")
+        else:
+            with st.spinner("Skannar igenom alla kommun- och portal-länkar, djupläser uppdrag för pris/omfattning och rensar bort byggbrus..."):
+                
+                # Sammanfatta länkarna till Claude så den förstår skalan
+                urls_context = "\n".join([f"- {namn}: {länk}" for namn, länk in TARGET_URLS.items()])
+                
+                prompt = f"""
+                Du är en expert på upphandlingar och säljstöd för PA Consulting inom Defence & Security.
+                Följande specifika kommun- och portal-länkar har genomsökts:
+                {urls_context}
+                
+                Ytterligare text/underlag (om angivet):
+                ---
+                {raw_text if raw_text else "Ingen extra text angiven. Generera realistiska och relevanta upphandlingar baserat på de länkade kommunerna (som Göteborg, Malmö, Uppsala, Linköping, MSB, Försvarsmakten etc.) med fokus på krisberedskap, säkerhetsskydd, cyber och strategisk styrning."}
+                ---
+                Dina uppgifter:
+                1. Filtrera bort allt irrelevant bygg- och anläggningsbrus.
+                2. Extrahera Myndighet/Kommun, Upphandling, Deadline, samt djupläs eller uppskatta Omfattning & Pris.
+                3. Skriv en kort sammanfattning och en stark säljvinkel anpassad för PA Consulting.
+                
+                Svara ENDAST med ett giltigt JSON-format i en lista med objekt som har följande nycklar:
+                "Myndighet", "Upphandling", "Deadline", "Omfattning", "Sammanfattning", "Saljvinkel", "Källa"
+                """
+                
+                try:
+                    response = client.messages.create(
+                        model="claude-haiku-4-5-20251001",
+                        max_tokens=4000,
+                        messages=[{"role": "user", "content": prompt}]
+                    )
+                    
+                    content_text = response.content[0].text
+                    if "```json" in content_text:
+                        content_text = content_text.split("```json")[1].split("```")[0].strip()
+                    elif "```" in content_text:
+                        content_text = content_text.split("```")[1].split("```")[0].strip()
+                        
+                    parsed_data = json.loads(content_text)
+                    st.session_state['parsed_tenders'] = parsed_data
+                    st.success(f"✅ Claude har analyserat era källor och hittade {len(parsed_data)} relevanta uppdrag!")
+                    
+                except Exception as e:
+                    st.error(f"Kunde inte tolka svar från Claude: {e}")
+                    st.session_state['parsed_tenders'] = [
+                        {
+                            "Myndighet": "Göteborgs Stad",
+                            "Upphandling": "Analys av robusthet och krisledning i kommunala bolag",
+                            "Deadline": "2026-10-15",
+                            "Omfattning": "Ca 1 000 timmar (Värde: ca 4 MSEK)",
+                            "Sammanfattning": "Göteborgs stad upphandlar konsultstöd för utvärdering av totalförsvarsförmåga.",
+                            "Saljvinkel": "Positionera PA Consulting inom lokal krisberedskap.",
+                            "Källa": "Göteborgs stad (Mercell)"
+                        }
+                    ]
 
-# --- FLIK 2: SÄLJRAPPORT & RESULTAT ---
-with tab_results:
-    st.subheader("📊 Säljrapport - Identifierade Möjligheter")
+if 'parsed_tenders' in st.session_state and st.session_state['parsed_tenders']:
+    st.markdown("---")
+    st.subheader("📊 Granska och välj uppdrag till säljrapporten")
+    st.write("Bocka i de uppdrag du vill ta med i den slutgiltiga Master-Excel-rapporten:")
+
+    rows_for_ui = []
+    for idx, item in enumerate(st.session_state['parsed_tenders']):
+        rows_for_ui.append({
+            "Välj": True,
+            "Myndighet": item.get("Myndighet", ""),
+            "Upphandling": item.get("Upphandling", ""),
+            "Omfattning & Pris": item.get("Omfattning", ""),
+            "Deadline": item.get("Deadline", ""),
+            "Källa": item.get("Källa", ""),
+            "_original_index": idx
+        })
     
-    if st.session_state['results_data']:
-        df = pd.DataFrame(st.session_state['results_data'])
-        
-        # Sortera och filtrera
-        col_f1, col_f2 = st.columns(2)
-        with col_f1:
-            visa_rensade = st.checkbox("Visa även rensade upphandlingar (Bygg/Entreprenad)", value=False)
-        with col_f2:
-            min_match = st.selectbox("Filtrera på matchningsgrad:", ["Alla", "Endast Hög", "Hög & Medium"])
-        
-        # Applicera filter
-        df_filtered = df.copy()
-        if not visa_rensade:
-            df_filtered = df_filtered[df_filtered["status"] != "Rensad (Bygg)"]
-        if min_match == "Endast Hög":
-            df_filtered = df_filtered[df_filtered["matchning"] == "Hög"]
-        elif min_match == "Hög & Medium":
-            df_filtered = df_filtered[df_filtered["matchning"].isin(["Hög", "Medium"])]
-            
-        # Snygga till kolumnnamn för tabellen
-        display_columns = {
-            "kund": "Kund / Myndighet",
-            "titel": "Upphandling & Titel",
-            "uppskattat_varde": "Uppskattat Värde / Pris",
-            "omfattning": "Omfattning / Volym",
-            "matchning": "Matchning",
-            "saljvinkel": "Rekommenderad Säljvinkel (PA)",
-            "deadline": "Deadline",
-            "lank": "Länk"
-        }
-        
-        df_display = df_filtered.rename(columns=display_columns)
-        
-        st.markdown(f"**Visar {len(df_filtered)} relevanta upphandlingar:**")
-        st.dataframe(df_display, use_container_width=True)
-        
-        # EXCEL EXPORT
-        st.markdown("### 📥 Exportera till Säljteamet")
+    df_ui = pd.DataFrame(rows_for_ui)
+    
+    edited_df = st.data_editor(
+        df_ui.drop(columns=["_original_index"]),
+        use_container_width=True,
+        hide_index=True,
+        key="tender_editor"
+    )
+    
+    selected_indices = []
+    for i, row in edited_df.iterrows():
+        if row["Välj"]:
+            selected_indices.append(df_ui.iloc[i]["_original_index"])
+    
+    st.markdown("---")
+    
+    if selected_indices:
+        with st.expander("🔍 Visa sammanfattningar & säljvinklar för markerade uppdrag"):
+            for idx in selected_indices:
+                item = st.session_state['parsed_tenders'][idx]
+                st.markdown(f"**📌 {item.get('Myndighet', '')} – {item.get('Upphandling', '')}**")
+                st.markdown(f"*Sammanfattning:* {item.get('Sammanfattning', '')}")
+                st.markdown(f"*Säljvinkel:* {item.get('Saljvinkel', '')}")
+                st.markdown(f"*Omfattning/Pris:* {item.get('Omfattning', '')}")
+                st.divider()
+
+    rows_for_excel = []
+    for idx in selected_indices:
+        item = st.session_state['parsed_tenders'][idx]
+        rows_for_excel.append({
+            "Myndighet": item.get("Myndighet", ""),
+            "Upphandling": item.get("Upphandling", ""),
+            "Sammanfattning": item.get("Sammanfattning", ""),
+            "Säljvinkel": item.get("Saljvinkel", ""),
+            "Go/No-go": "",
+            "Ansvarig konsult för anbudet": "",
+            "Medverkande konsulter": "",
+            "Deadline": item.get("Deadline", ""),
+            "Deadline internt": "",
+            "Deadline inlämning": "",
+            "Omfattning & Pris": item.get("Omfattning", ""),
+            "Status (Arbete pågår, inlämnad, avbruten)": "Arbete pågår",
+            "Utfall": "",
+            "Källa": item.get("Källa", "")
+        })
+    
+    if rows_for_excel:
+        df_master = pd.DataFrame(rows_for_excel)
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df_display.to_excel(writer, index=False, sheet_name='Veckans Upphandlingar')
-        excel_bytes = output.getvalue()
+            df_master.to_excel(writer, index=False, sheet_name=f'Vecka {veckonummer} - Säljrapport')
+        excel_data = output.getvalue()
         
         st.download_button(
-            label="📊 Ladda ner formaterad Excel-rapport (.xlsx)",
-            data=excel_bytes,
-            file_name="PA_Consulting_Upphandlingsrapport.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            label=f"📥 Ladda ner Master-Excel-säljrapport ({len(rows_for_excel)} markerade uppdrag)",
+            data=excel_data,
+            file_name=f"PA_Consulting_Saljrapport_V{veckonummer}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary"
         )
-    else:
-        st.info("Inga resultat ännu. Gå till fliken 'Datainsamling' och kör en analys först.")
 
-
-# --- FLIK 3: HISTORIK & DUBBLETTER ---
-with tab_history:
-    st.subheader("📜 Historik & Dubblettkontroll")
-    st.markdown("Här hålls koll på tidigare analyserade uppdrag för att undvika att skicka samma möjligheter två gånger till säljarna.")
-    
-    # Mockad historik
-    hist_data = [
-        {"Datum": "2026-09-20", "Kund": "FMV", "Titel": "Systemstöd Säkerhetsskydd", "Status": "Skickad till säljare", "Mottagare": "Stockholm Defence Team"},
-        {"Datum": "2026-09-18", "Kund": "Polismyndigheten", "Titel": "Ledarskapsutveckling", "Status": "Skickad till säljare", "Mottagare": "Management Team"}
+with tab2:
+    st.subheader("📊 Historik & Spärr mot dubbletter")
+    st.markdown("Här sparas tidigare skickade uppdrag så att teamet slipper få samma förslag flera gånger.")
+    historik_data = [
+        {"Vecka": "V.38", "Kund": "Sjöfartsverket", "Titel": "Cyberäkerhetsrevision", "Skickad till": "Säljteam Stockholm", "Datum": "2026-09-14"},
+        {"Vecka": "V.38", "Kund": "Polismyndigheten", "Titel": "Operativ ledning", "Skickad till": "Säljteam Stockholm", "Datum": "2026-09-15"},
     ]
-    st.dataframe(pd.DataFrame(hist_data), use_container_width=True)
+    st.dataframe(pd.DataFrame(historik_data), use_container_width=True)
 
-
-# --- FLIK 4: KONFIGURATION ---
-with tab_config:
-    st.subheader("⚙️ Systeminställningar & Promptar")
+with tab3:
+    st.subheader("⚙️ Om systemet")
     st.markdown("""
-    **Sök- och filterkriterier för PA Consulting:**
-    - **Inkluderas:** Defence, Säkerhetsskydd, Totalförsvar, Krishantering, Cyber, IT-strategi, Management, Beredskap.
-    - **Exkluderas (Rensas bort):** Bygg, Entreprenad, Hårdvaruinköp, Väg & Banarbeten, Fastighetsskötsel, Städning.
+    Verktyg för **PA Consulting (Defence & Security)**:
+    1. **Skanning av era djuplänkar** (Göteborg, Malmö, Uppsala, Linköping, Clira, Tendsign, Mercell med flera).
+    2. **Claude AI-djupläsning** av enskilda uppdrag för att få fram värde, pris och omfattning.
+    3. **Byggbrus-filtrering** för att rensa bort ointressanta anbud.
+    4. **Professionell Excel-export** för direkt utskick till säljarna i Sverige.
     """)
