@@ -1,4 +1,4 @@
 streamlit
 anthropic
-pandas
 playwright
+pandas
