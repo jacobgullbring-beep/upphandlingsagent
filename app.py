@@ -19,7 +19,9 @@ if not api_key:
     st.error("ANTHROPIC_API_KEY saknas")
     st.stop()
 
-client = anthropic.Anthropic(api_key=api_key)
+client = anthropic.Anthropic(
+    api_key=api_key
+)
 
 st.success("✅ Claude ansluten")
 
@@ -36,37 +38,94 @@ if uploaded_file:
 
     st.dataframe(df)
 
-    if st.button("🚀 Testa första upphandlingen"):
+    antal = st.slider(
+        "Antal upphandlingar",
+        1,
+        min(len(df), 20),
+        min(len(df), 10)
+    )
 
-        row = df.iloc[0]
+    if st.button("🚀 Analysera"):
 
-        prompt = (
-            f"Organisation: {row['Organisation']}\n"
-            f"Titel: {row['Title']}\n"
-            f"Beskrivning: {row['Description']}\n\n"
-            "Bedöm om detta är relevant för PA Consulting Defence & Security.\n"
-            "Ge score mellan 0 och 100 samt motivering."
-        )
+        resultat = []
 
-        st.write("⏳ Skickar till Claude...")
+        progress = st.progress(0)
 
-        try:
+        rows = df.head(antal)
 
-            response = client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=300,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ]
+        for i, row in rows.iterrows():
+
+            organisation = str(row["Organisation"])
+            title = str(row["Title"])
+            description = str(row["Description"])
+
+            prompt = (
+                "Du arbetar för PA Consulting Defence & Security.\n\n"
+                "VIKTIGT:\n"
+                "Bedöm INTE om kunden är militär.\n"
+                "Bedöm om PA kan sälja management consulting.\n\n"
+                "Ge hög score för:\n"
+                "- PMO\n"
+                "- Programledning\n"
+                "- Transformation\n"
+                "- Förändringsledning\n"
+                "- Governance\n"
+                "- Operating Model\n"
+                "- Risk\n"
+                "- Resiliens\n"
+                "- Beredskap\n"
+                "- Säkerhetsskydd\n"
+                "- Informationssäkerhet\n"
+                "- Cybersäkerhet\n"
+                "- Verksamhetsutveckling\n"
+                "- Ledningsstöd\n\n"
+                "Ge låg score för:\n"
+                "- Måleri\n"
+                "- Bygg\n"
+                "- Städning\n"
+                "- Fordon\n"
+                "- Varuinköp\n\n"
+                f"Organisation: {organisation}\n"
+                f"Titel: {title}\n"
+                f"Beskrivning: {description}\n\n"
+                "Svara i exakt format:\n"
+                "SCORE: X\n"
+                "KATEGORI: text\n"
+                "MOTIVERING: text"
             )
 
-            st.success("✅ Svar mottaget")
+            try:
 
-            st.write(response.content[0].text)
+                response = client.messages.create(
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=250,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ]
+                )
 
-        except Exception as e:
+                svar = response.content[0].text
 
-            st.error(str(e))
+            except Exception as e:
+
+                svar = str(e)
+
+            resultat.append({
+                "Organisation": organisation,
+                "Title": title,
+                "AI Result": svar
+            })
+
+            progress.progress((i + 1) / len(rows))
+
+        result_df = pd.DataFrame(resultat)
+
+        st.subheader("🎯 Resultat")
+
+        st.dataframe(
+            result_df,
+            use_container_width=True
+        )
