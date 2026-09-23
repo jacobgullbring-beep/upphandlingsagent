@@ -2,15 +2,24 @@ import streamlit as st
 import pandas as pd
 import anthropic
 import os
+from io import BytesIO
+
+# =====================================
+# SETUP
+# =====================================
 
 st.set_page_config(
     page_title="PA Defence & Security Opportunity Radar",
-    page_icon="🛡️"
+    page_icon="🛡️",
+    layout="wide"
 )
 
 st.title("🛡️ PA Defence & Security Opportunity Radar")
 
-# Claude
+# =====================================
+# ANTHROPIC
+# =====================================
+
 try:
     api_key = st.secrets["ANTHROPIC_API_KEY"]
 except:
@@ -24,13 +33,16 @@ client = anthropic.Anthropic(api_key=api_key)
 
 st.success("✅ Claude ansluten")
 
-# CSV
+# =====================================
+# FILUPPLADDNING
+# =====================================
+
 uploaded_file = st.file_uploader(
     "Ladda upp CSV",
     type=["csv"]
 )
 
-if uploaded_file:
+if uploaded_file is not None:
 
     df = pd.read_csv(uploaded_file)
 
@@ -38,27 +50,55 @@ if uploaded_file:
 
     st.dataframe(df)
 
-    if st.button("🚀 Testa första upphandlingen"):
+    antal = st.slider(
+        "Antal upphandlingar",
+        min_value=1,
+        max_value=min(len(df), 20),
+        value=min(len(df), 10)
+    )
 
-        row = df.iloc[0]
+    if st.button("🚀 Analysera"):
 
-        organisation = str(row["Organisation"])
-        title = str(row["Title"])
-        description = str(row["Description"])
+        resultat = []
 
-        prompt = (
-            "Du arbetar för PA Consulting Defence & Security.\n\n"
-            "Bedöm om PA kan sälja management consulting här.\n\n"
-            f"Organisation: {organisation}\n"
-            f"Titel: {title}\n"
-            f"Beskrivning: {description}\n\n"
-            "Svara kort med:\n"
-            "SCORE: X av 10\n"
-            "KATEGORI: ...\n"
-            "MOTIVERING: ..."
-        )
+        progress = st.progress(0)
 
-        with st.spinner("⏳ Skickar till Claude..."):
+        rows = df.head(antal)
+
+        for i, row in rows.iterrows():
+
+            organisation = str(row["Organisation"])
+            title = str(row["Title"])
+            description = str(row["Description"])
+            value = str(row["Value"])
+            link = str(row["Link"])
+
+            prompt = (
+                "Du arbetar för PA Consulting Defence & Security.\n\n"
+                "Bedöm INTE om kunden är militär.\n"
+                "Bedöm om PA kan sälja management consulting.\n\n"
+                "Ge hög relevans för:\n"
+                "- PMO\n"
+                "- Programledning\n"
+                "- Transformation\n"
+                "- Förändringsledning\n"
+                "- Governance\n"
+                "- Risk\n"
+                "- Resiliens\n"
+                "- Beredskap\n"
+                "- Säkerhetsskydd\n"
+                "- Informationssäkerhet\n"
+                "- Cybersäkerhet\n"
+                "- Verksamhetsutveckling\n\n"
+                "Organisation: " + organisation + "\n"
+                "Titel: " + title + "\n"
+                "Beskrivning: " + description + "\n"
+                "Värde: " + value + "\n\n"
+                "Svara enligt:\n"
+                "SCORE: X av 10\n"
+                "KATEGORI: ...\n"
+                "MOTIVERING: ..."
+            )
 
             try:
 
@@ -73,8 +113,14 @@ if uploaded_file:
                     ]
                 )
 
-                st.success("✅ Svar mottaget")
+                ai_result = response.content[0].text
 
-                st.write(response.content[0].text)
+            except Exception as e:
 
-            except Exception
+                ai_result = str(e)
+
+            resultat.append({
+                "Organisation": organisation,
+                "Title": title,
+                "Value": value,
+                "Link": link
