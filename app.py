@@ -25,15 +25,14 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.title("🛡️ GTM Säljbevakning – Defence & Security")
-st.write("Molnbaserad bevakning och AI-analys för svenska försvars- och säkerhetsmarknaden.")
+st.title("🛡️ GTM Säljbevakning – Defence & Security & Management")
+st.write("Molnbaserad bevakning med breddat management-filter och aktiva sökord för totalförsvar och konsulttjänster.")
 
 # --- SIDOMENY MED ALLA DIREKTLÄNKAR & AGGREGATORER ---
 st.sidebar.header("🔗 Direktlänkar & Aggregatorer")
 st.sidebar.markdown("- [Hitta Upphandlingar (Försvar)](https://www.hittaupphandlingar.se/forsvar)")
 st.sidebar.markdown("- [Vunnet.se (Vunna affärer)](https://vunnet.se/upphandlingar?typ=alla)")
 
-# Lista med alla länkar som ska skannas automatiskt under flik 2
 all_sidebar_links = [
     {"name": "Hitta Upphandlingar (Försvar)", "url": "https://www.hittaupphandlingar.se/forsvar"},
     {"name": "Göteborgs Stad", "url": "https://app.mercell.com/org/goteborgs_stads_upphandlingar"},
@@ -72,32 +71,37 @@ client = anthropic.Anthropic(api_key=api_key)
 # --- HUVUDGRÄNSSNITT MED FLIKAR ---
 tab_files, tab_scan = st.tabs(["📂 Filer & ZIP-arkiv", "🌐 Scanna igenom upphandlingar"])
 
-# --- DELAD AI-PROMPT-LOGIK FÖR MANAGEMENT & FÖRSVAR ---
-def build_strict_prompt(target_source_name, text_content, today_str):
+# --- BREDDAT & SÖKORDSSTYRT FILTER ---
+def build_smart_prompt(target_source_name, text_content, today_str):
     return f"""
-    Du är en expert på Business Development och GTM inom Management Consulting med inriktning mot Defence & Security på den svenska marknaden (försvar, säkerhet, totalförsvar, civilt försvar, krisberedskap och robusthet) för ett ledande konsultbolag. 
+    Du är en expert på Business Development och GTM inom Management Consulting på den svenska marknaden med fokus på konsulttjänster, organisation, strategi och affärer inom offentlig sektor, totalförsvar och samhällsviktig verksamhet. 
     Dagens datum är {today_str}. 
     Analyserar texten från '{target_source_name}' mycket noggrant.
     
-    🔍 **SKARPA REGLER FÖR INKLUDERING (ENBART MANAGEMENT CONSULTING):**
-    1. **INKLUDERA ENDAST:** 
-       - Uppdrag som rör **Management Consulting, programledning, projektledning, strategisk rådgivning, organisationsutveckling, förändringsledning, risk- och sårbarhetsanalys, säkerhetsskyddsanalys eller informationssäkerhetsstyrning**.
-       - Köparen måste vara inom försvarssektorn (FMV, Försvarsmakten, MSB, Säpo etc.) ELLER inom stat/region/kommun men då **exklusivt** inriktat på totalförsvar, civilt försvar, krisberedskap, säkerhetsskydd eller samhällsviktig robusthet där managementkonsulter kan leverera.
+    🎯 **PRIORITERADE SÖKORD OCH TEMAN (Leta efter dessa):**
+    - Managementkonsulting, strategisk rådgivning, organisationsutveckling, förändringsledning
+    - Programledning, projektledning, uppdragsledning
+    - Krisberedskap, säkerhetsskydd, säkerhetsskyddsanalys, risk- och sårbarhetsanalys (RSA)
+    - Totalförsvar, civilt försvar, samhällsviktig verksamhet, robusthet, beredskap
+    - Allmänna konsultstöd, utredningar, processledning, verksamhetsutveckling
+    
+    🔍 **REGLER FÖR INKLUDERING:**
+    1. **INKLUDERA** uppdrag som rör konsulttjänster inom management, ledning, strategi, organisation, säkerhet eller krisberedskap (oavsett om köparen är en kommun, region, statlig myndighet eller försvarsaktör).
+    2. Om upphandlingen har en bred titel (t.ex. "Konsultstöd", "Strategiskt stöd", "Utredning"), ta med den om texten antyder att det rör verksamhets-, organisations- eller ledningsfrågor.
     
     ❌ **ABSOLUT REVA / RENSA BORT OMEDELBART:**
        - **Bygg, anläggning, entreprenad, markarbeten, fastighetsförvaltning och VVS.**
-       - **El, energi, VA (vatten/avlopp), infrastrukturbyggnation och fysiska installationer.**
-       - **IT-drift, systemförvaltning, mjukvarulicenser och hårdvaruinköp** (såvida det inte rör ren strategisk IT-styrning/arkitektur inom säkerhetskänslig verksamhet).
-       - **Rena varuinköp, fordon, livsmedel, städning, friskvård eller rent administrativa rutinuppdrag utan koppling till ledning/styrning.**
-       - Om en upphandling har en bred titel (t.ex. "Konsulttjänster"), ta **endast** med den om brödtexten tydligt bekräftar att det handlar om management-, styrnings- eller ledningskonsulter inom försvar/säkerhet. Annars uteslut den.
+       - **El, energi, kraftnät, VA (vatten/avlopp), vägarbeten och fysisk infrastruktur.**
+       - **IT-drift, molntjänster, hårdvaruinköp, mjukvarulicenser och ren systemförvaltning.**
+       - **Rena varuinköp, livsmedel, skolmat, städning, fordon, friskvård eller rent administrativa rutinuppdrag utan konsult-/ledningskaraktär.**
     
     Returnera resultatet ENDAST som en giltig JSON-lista med relevanta objekt. Om inget matchar, returnera en tom lista `[]`. Inga markdown-backticks kring JSON-svaret (börja med [ och sluta med ]). Varje objekt ska ha exakt dessa nycklar:
     - "Myndighet": (Organisation/Köpare i Sverige)
     - "Upphandling": (Titel på upphandlingen)
     - "Deadline": (Sista svarsdag om det framgår, format ÅÅÅÅ-MM-DD, annars "Ej angivet")
     - "Omfattning": (Uppskattad omfattning i timmar, belopp eller tid, annars "Ej angivet")
-    - "Sammanfattning": (En fyllig sammanfattning på 2-3 meningar som förklarar varför detta är ett relevant managementuppdrag inom Defence & Security)
-    - "Saljvinkel": (Konkret rekommendation på hur konsultteamet inom management bör positionera sig)
+    - "Sammanfattning": (En fyllig sammanfattning på 2-3 meningar som förklarar varför detta är ett relevant uppdrag för managementkonsulter)
+    - "Saljvinkel": (Konkret rekommendation på hur konsultteamet bör positionera sig)
     - "Källa": ({target_source_name})
 
     Text att analysera:
@@ -131,10 +135,10 @@ with tab_files:
             files_to_process.append((uploaded_zip.name, content))
 
         if files_to_process:
-            if st.button(f"🚀 Kör strikt management-analys på {len(files_to_process)} filer", type="primary", key="btn_files"):
-                with st.spinner("Analyserar filer med strikt management-filter..."):
+            if st.button(f"🚀 Kör smart analys på {len(files_to_process)} filer", type="primary", key="btn_files"):
+                with st.spinner("Analyserar filer med breddat management-filter..."):
                     for file_name, file_content in files_to_process:
-                        prompt = build_strict_prompt(file_name, file_content, today_str)
+                        prompt = build_smart_prompt(file_name, file_content, today_str)
                         
                         try:
                             response = client.messages.create(
@@ -166,9 +170,9 @@ with tab_files:
                     
                     if all_parsed_data:
                         st.session_state['parsed_tenders'] = all_parsed_data
-                        st.success(f"✅ Analys klar! Hittade {len(all_parsed_data)} relevanta management-uppdrag.")
+                        st.success(f"✅ Analys klar! Hittade {len(all_parsed_data)} relevanta uppdrag.")
                     else:
-                        st.warning("Hittade inga matchande management-upphandlingar i filerna.")
+                        st.warning("Hittade inga matchande uppdrag i filerna.")
 
 # --- FLIK 2: SCANNA ALLT (VUNNET SIDOR + PORTALER MED SIDNUMRERING) ---
 with tab_scan:
@@ -181,14 +185,13 @@ with tab_scan:
     with col_v2:
         max_pages = st.number_input("Antal sidor på Vunnet.se", min_value=1, max_value=162, value=3, step=1)
     with col_v3:
-        max_portal_pages = st.number_input("Antal sidor per portal (t.ex. Mercell)", min_value=1, max_value=5, value=2, step=1, help="Loopar igenom så här många sidor på portaler som stöder ?page=X")
+        max_portal_pages = st.number_input("Antal sidor per portal (t.ex. Mercell)", min_value=1, max_value=5, value=2, step=1)
     
-    if st.button("🚀 Starta strikt helhetskanning (med sid-loopar)", type="primary", key="btn_scan_all"):
+    if st.button("🚀 Starta smart helhetskanning (med sökord & sid-loopar)", type="primary", key="btn_scan_all"):
         master_parsed_data = []
         today_str = datetime.now().strftime("%Y-%m-%d")
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
         
-        # Beräkna totala steg för progress bar
         total_steps = max_pages + (len(all_sidebar_links) * max_portal_pages)
         current_step = 0
         
@@ -215,10 +218,10 @@ with tab_scan:
                     if len(page_text) < 200:
                         break
                     
-                    prompt = build_strict_prompt(f"Vunnet.se (Sida {current_page})", page_text, today_str)
+                    prompt = build_smart_prompt(f"Vunnet.se (Sida {current_page})", page_text, today_str)
                     
                     response_ai = client.messages.create(
-                        model="claude-3-5-haiku-20241022",
+                        model="claude-haiku-4-5-20251001",
                         max_tokens=4000,
                         messages=[{"role": "user", "content": prompt}]
                     )
@@ -243,14 +246,13 @@ with tab_scan:
                 pass
             time.sleep(0.3)
 
-        # 2. Skrapa alla direktlänkar i sidomenyn med sid-loop (1 till max_portal_pages)
+        # 2. Skrapa alla direktlänkar i sidomenyn med sid-loop
         for link_info in all_sidebar_links:
             for p in range(1, max_portal_pages + 1):
                 current_step += 1
                 progress_pct = current_step / total_steps
                 progress_bar.progress(min(progress_pct, 1.0))
                 
-                # Bygg URL med sidnummer (hantera om länken redan har ? eller &)
                 base_url = link_info['url']
                 if "?" in base_url:
                     paginated_url = f"{base_url}&page={p}"
@@ -267,14 +269,14 @@ with tab_scan:
                         page_text = soup.get_text(separator="\n", strip=True)
                         
                         if len(page_text) < 150:
-                            break # Om sidan är tom, hoppa till nästa länk
+                            break
                         
-                        prompt = build_strict_prompt(f"{link_info['name']} (Sida {p})", page_text, today_str)
+                        prompt = build_smart_prompt(f"{link_info['name']} (Sida {p})", page_text, today_str)
                         
                         response_ai = client.messages.create(
-                            model="claude-haiku-4-5-20251001",
+                            model="claude-3-5-haiku-20241022",
                             max_tokens=4000,
-                            messages=[{"role": "user", "content": prompt}]
+                        messages=[{"role": "user", "content": prompt}]
                         )
                         
                         raw_output = "".join([block.text for block in response_ai.content if hasattr(block, "text")])
@@ -302,11 +304,11 @@ with tab_scan:
         
         if master_parsed_data:
             st.session_state['parsed_tenders'] = master_parsed_data
-            st.success(f"✅ Helhetskanning med sid-loopar klar! Hittade totalt {len(master_parsed_data)} relevanta management-uppdrag.")
+            st.success(f"✅ Helhetskanning klar! Hittade totalt {len(master_parsed_data)} relevanta uppdrag.")
         else:
-            st.warning("Hittade inga matchande management-uppdrag på de skannade sidorna.")
+            st.warning("Hittade inga matchande uppdrag på de skannade sidorna.")
 
-# --- GEMENSAMT RESULTAT & EXPORT (FÖR BÅDA KÄLLORNA) ---
+# --- GEMENSAMT RESULTAT & EXPORT ---
 if 'parsed_tenders' in st.session_state and st.session_state['parsed_tenders']:
     st.markdown("---")
     st.subheader("📊 Granska uppdrag & Välj för Excel-export")
@@ -346,7 +348,7 @@ if 'parsed_tenders' in st.session_state and st.session_state['parsed_tenders']:
             "Myndighet": item.get("Myndighet", ""),
             "Upphandling": item.get("Upphandling", ""),
             "Sammanfattning": item.get("Sammanfattning", ""),
-            "Säljvinkel": item.get("Säljvinkel", ""),
+            "Säljvinkel": item.get("Saljvinkel", ""),
             "Go/No-go": "",
             "Ansvarig konsult": "",
             "Deadline": item.get("Deadline", ""),
