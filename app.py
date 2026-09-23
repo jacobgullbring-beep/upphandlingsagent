@@ -2,14 +2,16 @@ import streamlit as st
 import pandas as pd
 import anthropic
 import os
+import re
 from io import BytesIO
 
 st.set_page_config(
     page_title="PA D&S Radar",
-    page_icon="🛡️"
+    page_icon="🛡️",
+    layout="wide"
 )
 
-st.title("🛡️ PA D&S Opportunity Radar")
+st.title("🛡️ PA Defence & Security Opportunity Radar")
 
 # Claude
 
@@ -41,11 +43,18 @@ if uploaded_file:
 
     st.dataframe(df)
 
-    if st.button("🚀 Analysera första 5 upphandlingarna"):
+    antal = st.slider(
+        "Antal upphandlingar",
+        min_value=1,
+        max_value=min(len(df), 20),
+        value=min(len(df), 5)
+    )
+
+    if st.button("🚀 Analysera"):
 
         resultat = []
 
-        rows = df.head(5)
+        rows = df.head(antal)
 
         progress = st.progress(0)
 
@@ -54,14 +63,29 @@ if uploaded_file:
             organisation = str(row["Organisation"])
             title = str(row["Title"])
             description = str(row["Description"])
+            value = str(row["Value"])
+            link = str(row["Link"])
 
             prompt = (
                 "Du arbetar för PA Consulting Defence & Security.\n\n"
                 "Bedöm om PA kan sälja management consulting här.\n\n"
+                "Ge hög relevans för:\n"
+                "- PMO\n"
+                "- Programledning\n"
+                "- Transformation\n"
+                "- Förändringsledning\n"
+                "- Governance\n"
+                "- Risk\n"
+                "- Resiliens\n"
+                "- Beredskap\n"
+                "- Säkerhetsskydd\n"
+                "- Informationssäkerhet\n"
+                "- Cybersäkerhet\n"
+                "- Verksamhetsutveckling\n\n"
                 f"Organisation: {organisation}\n"
                 f"Titel: {title}\n"
                 f"Beskrivning: {description}\n\n"
-                "Svara med:\n"
+                "Svara exakt så här:\n"
                 "SCORE: X av 10\n"
                 "KATEGORI: ...\n"
                 "MOTIVERING: ..."
@@ -86,21 +110,83 @@ if uploaded_file:
 
                 ai_result = str(e)
 
-            resultat.append({
-                "Organisation": organisation,
-                "Titel": title,
-                "AI Result": ai_result
-            })
+            score = 0
+
+            match = re.search(
+                r"SCORE:\s*(\d+)",
+                ai_result,
+                re.IGNORECASE
+            )
+
+            if match:
+                score = int(match.group(1))
+
+            if score >= 9:
+                priority = "🔥 Pursue"
+
+            elif score >= 7:
+                priority = "🟢 Review"
+
+            elif score >= 5:
+                priority = "🟡 Watch"
+
+            else:
+                priority = "🔴 Ignore"
+
+            resultat.append(
+                {
+                    "Score": score,
+                    "Priority": priority,
+                    "Organisation": organisation,
+                    "Title": title,
+                    "Value": value,
+                    "Link": link,
+                    "AI Result": ai_result
+                }
+            )
 
             progress.progress((i + 1) / len(rows))
 
         result_df = pd.DataFrame(resultat)
 
-        st.subheader("🎯 Resultat")
+        result_df = result_df.sort_values(
+            by="Score",
+            ascending=False
+        )
 
-        st.dataframe(result_df)
+        # Dashboard
 
-        # Excel-export
+        pursue_count = len(
+            result_df[result_df["Priority"] == "🔥 Pursue"]
+        )
+
+        review_count = len(
+            result_df[result_df["Priority"] == "🟢 Review"]
+        )
+
+        ignore_count = len(
+            result_df[result_df["Priority"] == "🔴 Ignore"]
+        )
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric("🔥 Pursue", pursue_count)
+
+        with col2:
+            st.metric("🟢 Review", review_count)
+
+        with col3:
+            st.metric("🔴 Ignore", ignore_count)
+
+        st.subheader("🎯 Möjligheter")
+
+        st.dataframe(
+            result_df,
+            use_container_width=True
+        )
+
+        # Excel export
 
         output = BytesIO()
 
@@ -112,12 +198,12 @@ if uploaded_file:
             result_df.to_excel(
                 writer,
                 index=False,
-                sheet_name="Resultat"
+                sheet_name="D&S Radar"
             )
 
         st.download_button(
             label="📥 Ladda ner Excel",
             data=output.getvalue(),
-            file_name="PA_DS_Resultat.xlsx",
+            file_name="PA_DS_Opportunity_Radar.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
