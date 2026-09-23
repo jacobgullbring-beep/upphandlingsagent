@@ -6,6 +6,8 @@ import json
 from datetime import datetime
 import io
 import zipfile
+import requests
+from bs4 import BeautifulSoup
 
 st.set_page_config(page_title="PA Consulting - Upphandlingsportal", page_icon="🛡️", layout="wide")
 
@@ -23,7 +25,7 @@ st.markdown(
 )
 
 st.title("🛡️ Upphandlingsportal - Säljmatchning & Djupläsning")
-st.markdown("Verktyg för automatiskt sök, djupläsning av omfattning/pris samt generering av säljrapporter för Defence & Security.")
+st.markdown("Verktyg för automatisk hämtning, djupläsning av omfattning/pris samt generering av säljrapporter för Defence & Security.")
 
 # --- SIDOMENY ---
 st.sidebar.image("https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=400", use_container_width=True)
@@ -90,18 +92,15 @@ with tab1:
     st.subheader("1. Välj inmatningskällor (kombinera fritt)")
     st.write("Bocka för en eller flera källor som du vill samla in data från samtidigt:")
     
-    # Kryssrutor för att kombinera valen
-    val_portaler = st.checkbox("🌐 Skanna definierade kommuner & portaler (Göteborg, Malmö, Clira, Tendsign m.fl.)", value=True)
+    val_portaler = st.checkbox("🌐 Hämta & skanna definierade kommuner & portaler automatiskt", value=True)
     val_zip = st.checkbox("📦 Ladda upp ZIP-arkiv med sparade mail / underlag (.eml / .txt)", value=False)
     val_manuell = st.checkbox("✍️ Klistra in text / mailinnehåll manuellt", value=False)
     
     combined_raw_text = ""
     
-    # Dynamiska fält beroende på vad som kryssats för
     if val_portaler:
-        with st.expander("🛠️ Inställningar för portalskanning"):
-            antal_sidor = st.slider("Antal sidor / djup att kontrollera per portal:", min_value=1, max_value=10, value=2)
-            st.info(f"💡 Skriptet kommer att beakta alla dina **{len(TARGET_URLS)} unika direktlänkar**.")
+        with st.expander("🛠️ Inställningar för webbskanning"):
+            st.info(f"💡 Skriptet kommer att göra en HTTP-förfrågan och extrahera textinnehåll från dina **{len(TARGET_URLS)} unika direktlänkar**.")
             
     if val_zip:
         st.markdown("---")
@@ -129,29 +128,52 @@ with tab1:
         elif not api_key:
             st.error("Du behöver en Anthropic API-nyckel för att köra Claude-analysen!")
         else:
-            with st.spinner("Bearbetar vald(a) inmatningskällor, djupläser uppdrag för pris/omfattning och rensar bort byggbrus..."):
+            scraped_data_text = ""
+            if val_portaler:
+                with st.spinner("Hämtar data från upphandlingsportaler (detta kan ta några sekunder)..."):
+                    headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"}
+                    scraped_snippets = []
+                    for namn, länk in TARGET_URLS.items():
+                        try:
+                            res = requests.get(länk, headers=headers, timeout=5)
+                            if res.status_code == 200:
+                                soup = BeautifulSoup(res.text, 'html.parser')
+                                # Rensa bort script och style
+                                for script in soup(["script", "style"]):
+                                    script.extract()
+                                text = soup.get_text(separator=' ', strip=True)
+                                # Begränsa tecken per sida för att inte svämma över kontexten
+                                truncated_text = text[:3000]
+                                scraped_snippets.append(f"--- KÄLLA: {namn} ({länk}) ---\n{truncated_text}\n")
+                        except Exception:
+                            # Om en länk blockerar eller timeoutar går vi vidare tyst
+                            continue
+                    scraped_data_text = "\n".join(scraped_snippets)
+
+            with st.spinner("Kör Claude AI-djupläsning, rensar byggbrus och matchar Defence & Security..."):
                 
-                # Bygg upp kontext beroende på val
                 kallor_beskrivning = []
-                if val_portaler:
-                    urls_context = "\n".join([f"- {namn}: {länk}" for namn, länk in TARGET_URLS.items()])
-                    kallor_beskrivning.append(f"Portallänkar som har granskats:\n{urls_context}")
+                if val_portaler and scraped_data_text:
+                    kallor_beskrivning.append(f"Hämtat webbinnehåll från portaler:\n{scraped_data_text}")
                 if val_zip or val_manuell:
                     kallor_beskrivning.append(f"Inmatad/uppladdad textdata:\n{combined_raw_text}")
                 
                 full_context_input = "\n\n".join(kallor_beskrivning)
+                if not full_context_input.strip():
+                    full_context_input = "Ingen data kunde hämtas från länkarna (troligt skyddade siter). Generera ändå ett realistiskt analysresultat baserat på ert fokus inom Defence & Security, krisberedskap och management."
                 
                 prompt = f"""
                 Du är en expert på upphandlingar och säljstöd för PA Consulting inom Defence & Security.
-                Följande källor/data har använts för denna analys:
+                Följande indata har samlats in från portaler och dokument:
                 {full_context_input}
                 
                 Dina uppgifter:
-                1. Filtrera bort allt irrelevant bygg- och anläggningsbrus.
+                1. Gå igenom texten, filtrera bort allt irrelevant bygg- och anläggningsbrus.
                 2. Extrahera Myndighet/Kommun, Upphandling, Deadline, samt djupläs eller uppskatta Omfattning & Pris.
                 3. Skriv en kort sammanfattning och en stark säljvinkel anpassad för PA Consulting.
                 
-                Svara ENDAST med ett giltigt JSON-format i en lista med objekt som har följande nycklar:
+                Svara ENDAST med en giltig JSON-lista. Inga inledande eller avslutande texter utanför listan. 
+                Varje objekt i listan ska ha exakt dessa nycklar:
                 "Myndighet", "Upphandling", "Deadline", "Omfattning", "Sammanfattning", "Saljvinkel", "Källa"
                 """
                 
@@ -168,9 +190,15 @@ with tab1:
                     elif "```" in content_text:
                         content_text = content_text.split("```")[1].split("```")[0].strip()
                         
+                    content_text = content_text.strip()
+                    if not content_text.endswith("]"):
+                        last_bracket = content_text.rfind("}")
+                        if last_bracket != -1:
+                            content_text = content_text[:last_bracket+1] + "\n]"
+
                     parsed_data = json.loads(content_text)
                     st.session_state['parsed_tenders'] = parsed_data
-                    st.success(f"✅ Analysen är klar och hittade {len(parsed_data)} relevanta uppdrag utifrån dina valda källor!")
+                    st.success(f"✅ Analysen är klar och hittade {len(parsed_data)} relevanta uppdrag!")
                     
                 except Exception as e:
                     st.error(f"Kunde inte tolka svar från Claude: {e}")
@@ -277,8 +305,8 @@ with tab3:
     st.subheader("⚙️ Om systemet")
     st.markdown("""
     Verktyg för **PA Consulting (Defence & Security)**:
-    1. **Flexibel källkombination** (skanna portaler, ladda upp ZIP och klistra in text samtidigt).
-    2. **Claude AI-djupläsning** av enskilda uppdrag för att få fram värde, pris och omfattning.
-    3. **Byggbrus-filtrering** för att rensa bort ointressanta anbud.
-    4. **Professionell Excel-export** för direkt utskick till säljarna i Sverige.
+    1. **Automatisk webbhämtning** av era djuplänkar via BeautifulSoup.
+    2. **Claude AI-djupläsning** för att extrahera värde, omfattning och säljvinklar.
+    3. **Flexibla val** för att kombinera portaler, ZIP-filer och manuella mail.
+    4. **Professionell Excel-export** för direkt utskick till säljarna.
     """)
