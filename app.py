@@ -2,13 +2,24 @@ import streamlit as st
 import pandas as pd
 import anthropic
 import os
+import re
+from io import BytesIO
+
+# =====================================
+# PAGE
+# =====================================
 
 st.set_page_config(
     page_title="PA Defence & Security Opportunity Radar",
-    page_icon="🛡️"
+    page_icon="🛡️",
+    layout="wide"
 )
 
 st.title("🛡️ PA Defence & Security Opportunity Radar")
+
+# =====================================
+# CLAUDE
+# =====================================
 
 try:
     api_key = st.secrets["ANTHROPIC_API_KEY"]
@@ -19,11 +30,13 @@ if not api_key:
     st.error("ANTHROPIC_API_KEY saknas")
     st.stop()
 
-client = anthropic.Anthropic(
-    api_key=api_key
-)
+client = anthropic.Anthropic(api_key=api_key)
 
 st.success("✅ Claude ansluten")
+
+# =====================================
+# FILE UPLOAD
+# =====================================
 
 uploaded_file = st.file_uploader(
     "Ladda upp CSV",
@@ -41,30 +54,32 @@ if uploaded_file:
     antal = st.slider(
         "Antal upphandlingar",
         1,
-        min(len(df), 20),
-        min(len(df), 10)
+        min(20, len(df)),
+        min(10, len(df))
     )
 
     if st.button("🚀 Analysera"):
 
         resultat = []
 
-        progress = st.progress(0)
-
         rows = df.head(antal)
+
+        progress = st.progress(0)
 
         for i, row in rows.iterrows():
 
             organisation = str(row["Organisation"])
             title = str(row["Title"])
             description = str(row["Description"])
+            value = str(row["Value"])
+            link = str(row["Link"])
 
             prompt = (
                 "Du arbetar för PA Consulting Defence & Security.\n\n"
-                "VIKTIGT:\n"
+
                 "Bedöm INTE om kunden är militär.\n"
-                "Bedöm om PA kan sälja management consulting.\n\n"
-                "Ge hög score för:\n"
+
+                "Bedöm om PA kan sälja:\n"
                 "- PMO\n"
                 "- Programledning\n"
                 "- Transformation\n"
@@ -79,53 +94,19 @@ if uploaded_file:
                 "- Cybersäkerhet\n"
                 "- Verksamhetsutveckling\n"
                 "- Ledningsstöd\n\n"
-                "Ge låg score för:\n"
-                "- Måleri\n"
-                "- Bygg\n"
-                "- Städning\n"
-                "- Fordon\n"
-                "- Varuinköp\n\n"
+
+                "Returnera exakt:\n\n"
+
+                "SCORE: X\n"
+                "CATEGORY: Y\n"
+                "REASON: Z\n\n"
+
                 f"Organisation: {organisation}\n"
                 f"Titel: {title}\n"
-                f"Beskrivning: {description}\n\n"
-                "Svara i exakt format:\n"
-                "SCORE: X\n"
-                "KATEGORI: text\n"
-                "MOTIVERING: text"
+                f"Beskrivning: {description}\n"
+                f"Värde: {value}"
             )
 
             try:
 
-                response = client.messages.create(
-                    model="claude-haiku-4-5-20251001",
-                    max_tokens=250,
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ]
-                )
-
-                svar = response.content[0].text
-
-            except Exception as e:
-
-                svar = str(e)
-
-            resultat.append({
-                "Organisation": organisation,
-                "Title": title,
-                "AI Result": svar
-            })
-
-            progress.progress((i + 1) / len(rows))
-
-        result_df = pd.DataFrame(resultat)
-
-        st.subheader("🎯 Resultat")
-
-        st.dataframe(
-            result_df,
-            use_container_width=True
-        )
+       
